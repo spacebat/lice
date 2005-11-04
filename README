@@ -1,0 +1,79 @@
+Lisp Computing Environment (LiCE)
+=================================
+
+What is LiCE
+------------
+
+LiCE is a GNU Emacs clone written entirely in common lisp. 
+
+I've tested it on CMUCL, SBCL, and Movitz. With a little work it could
+probably run on more.
+
+Installation
+------------
+
+I'd recommend just loading the source from the current directory for
+now.
+
+## CMUCL & SBCL
+
+To run LiCE on CMUCL or SBCL you need asdf, cl-uffi, and
+cl-ncurses. 
+
+1. Boot your lisp in the lice-0.1 directory.
+
+2. Load asdf, cl-uffi and cl-ncurses.
+
+3. run (asdf:oos 'asdf:load-op :lice).
+
+4. run (lice::lice)
+
+## Movitz
+
+Here's what I did:
+
+1. make a symlink lice-0.1/ to the losp/ directory.
+
+2. add somewhere in los0.lisp (require :lice-0.1/all.lisp)
+
+3. load movitz and run (create-image)
+
+4. from all.lisp copy the commented out progn at the end. uncomment it
+   and run it at your repl. This will make lice load after los0, which
+   is crutial.
+
+5. run (dump-image)
+
+Now load the movitz image in an emulator or copy it to a floppy.
+
+Documentation
+-------------
+
+There basically isn't any at this point. Most functions have
+docstrings taken from Emacs. Your best documentation at this point is
+the source.
+
+Current Status
+--------------
+
+LiCE has the following implemented:
+
+* interactive commands
+
+* window splits
+
+* input history
+
+* minibuffer input, history, tab completion
+
+* text properties
+
+* a basic lisp-interactive-mode
+
+* find-file and save-buffer
+
+* basic buffer editing including the mark, a kill ring, and navigation
+
+* universal arguments (C-u)
+
+The code is still fairly volatile and in some cases hacky.

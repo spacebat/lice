@@ -1,0 +1,41 @@
+-*- outline -*-
+
+Path To Success
+===============
+
+* fix up buffer-delete 
+
+* fix up marks
+** make the buffer point a mark
+** make the window min/max a point
+
+* add the C-SPC mark mark
+
+* redraw issues
+lock it down
+
+* input
+use ncurses getch.
+
+* C-g in the minibuffer
+
+* add modeline data?
+
+* open a file
+
+* save a file
+
+* minibuffer resizing to fit its content
+
+* window splitting
+
+* kill ring
+
+* undo
+
+* universal argument
+
+* print the keys pressed in the minibuffer
+
+* *messages* buffer
+
