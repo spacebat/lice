@@ -1,0 +1,15 @@
+Source: lice
+Section: editors
+Priority: optional
+Maintainer: Trent Buck <trentbuck@gmail.com>
+Build-Depends: debhelper (>= 4.0.0)
+Standards-Version: 3.6.2
+
+Package: lice
+Architecture: all
+Depends: ${shlibs:Depends}, ${misc:Depends}, cl-uffi, cl-ncurses
+Description: The Lisp Computing Environment (Emacs for Common Lisp)
+ LiCE is a GNU Emacs clone written entirely in Common Lisp. 
+ .
+ It has been tested it on CMUCL, SBCL, and Movitz. With a
+ little work it could probably run on more.
