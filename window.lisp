@@ -390,7 +390,7 @@ starting line."
 ;; 		 (/= n-many 0))
 ;; 	;; Add cache entries
 ;; 	(setf pt (buffer-scan-newline buffer start 0 n-many))
-;; 	(generate-lines-region cache bufer width (if (> pt 0) (1+ pt) pt) start)))))
+;; 	(generate-lines-region cache buffer width (if (> pt 0) (1+ pt) pt) start)))))
 
 (defun add-end-of-buffer (buffer lines)
   "The point can be at (buffer-size buffer) but we only scan to

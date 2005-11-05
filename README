@@ -40,7 +40,7 @@ Here's what I did:
 
 4. from all.lisp copy the commented out progn at the end. uncomment it
    and run it at your repl. This will make lice load after los0, which
-   is crutial.
+   is crucial.
 
 5. run (dump-image)
 
