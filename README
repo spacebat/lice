@@ -6,7 +6,7 @@ What is LiCE
 
 LiCE is a GNU Emacs clone written entirely in common lisp. 
 
-I've tested it on CMUCL, SBCL, and Movitz. With a little work it could
+I've tested it on CMUCL, SBCL, CLISP, and Movitz. With a little work it could
 probably run on more.
 
 Installation
