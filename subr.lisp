@@ -137,7 +137,7 @@ provides a file dialog box.
 See also `read-file-name-completion-ignore-case'
 and `read-file-name-function'."
   (declare (ignore predicate initial mustmatch default-filename dir))
-  (completing-read prompt #'file-completions))
+  (completing-read prompt #'file-completions :initial-input (princ-to-string *default-directory*)))
   
 (defun region-limit (beginningp)
   "Return the start or end position of the region.

@@ -145,7 +145,6 @@ MINIBUF must be a minibuffer."
       (delete-region end (zv minibuf)))))
 
 (defun setup-minibuffer-for-read (major-mode prompt initial-contents history)
-  (declare (ignore initial-contents))
   (save-window-excursion
     ;; Create a new minibuffer
     (let* ((frame (selected-frame))
@@ -162,6 +161,7 @@ MINIBUF must be a minibuffer."
     (show-minibuffer-prompt frame prompt)
     ;; move to the end of input
     (setf (marker-position (buffer-point new-minibuffer)) (buffer-size new-minibuffer))
+    (when initial-contents (insert initial-contents))
     ;; enter recursive edit
     (dformat +debug-v+ "ya ohoe~%")
     (incf (frame-minibuffers-active frame))

@@ -847,4 +847,8 @@ means that other_buffer is more likely to choose a relevant buffer."
   "Return t if object is an editor buffer."
   (typep object 'buffer))
 
+(defvar *default-directory* (truename "")
+  "Name of default directory of current buffer.
+To interactively change the default directory, use command `cd'.")
+
 (provide :lice-0.1/buffer)
