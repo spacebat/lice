@@ -138,7 +138,23 @@ See also `read-file-name-completion-ignore-case'
 and `read-file-name-function'."
   (declare (ignore predicate initial mustmatch default-filename dir))
   (completing-read prompt #'file-completions :initial-input (princ-to-string *default-directory*)))
-  
+
+(defun read-string (prompt &optional initial-input history default-value)
+  "Read a string from the minibuffer, prompting with string prompt.
+If non-nil, second arg initial-input is a string to insert before reading.
+  This argument has been superseded by default-value and should normally
+  be nil in new code.  It behaves as in `read-from-minibuffer'.  See the
+  documentation string of that function for details.
+The third arg history, if non-nil, specifies a history list
+  and optionally the initial position in the list.
+See `read-from-minibuffer' for details of history argument.
+Fourth arg default-value is the default value.  If non-nil, it is used
+ for history commands, and as the value to return if the user enters
+ the empty string.
+**Fifth arg inherit-input-method, if non-nil, means the minibuffer inherits
+ the current input method and the setting of `enable-multibyte-characters'."
+  (read-from-minibuffer prompt :initial-contents initial-input :history history :default-value default-value))
+
 (defun region-limit (beginningp)
   "Return the start or end position of the region.
 BEGINNINGP non-zero means return the start.
