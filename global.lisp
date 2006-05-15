@@ -8,6 +8,7 @@
 ;;(defparameter *debug-level* +debug-vvv+)
 
 (defmacro dformat (lvl &rest fmt-args)
+  (declare (ignore lvl fmt-args))
 ;;   (let ((f (gensym)))
 ;;     `(when (>= *debug-level* ,lvl)
 ;;        (with-open-file (,f #p"/tmp/debug" :direction :output :if-exists :append
@@ -52,7 +53,7 @@
 ;;     (apply #'format s fmt args)
 ;;     s))
 
-#-(or sbcl cmucl mcl clisp)
+#+movitz
 (defun read-from-string (string)
   "Read the string and return an sexpr. This is a MOVITZ hack
   because it doesn't have read-from-string."

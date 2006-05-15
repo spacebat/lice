@@ -131,6 +131,7 @@ been moved, and thus copies the wrong data into the string.  This
 doesn't effect most of the other users of make_string, so it should
 be left as is.  But we should use this function when conjuring
 buffer substrings."
+  (declare (ignore props))
   ;; If the gap intersects with the range we wanna grab, move it.
   (if (= start end)
       ""
@@ -178,7 +179,9 @@ If ESCAPE-FROM-EDGE is non-nil and POS is at the beginning of its
 field, then the beginning of the *previous* field is returned.
 If LIMIT is non-nil, it is a buffer position; if the beginning of the field
 is before LIMIT, then LIMIT will be returned instead."
+    (declare (ignore escape-from-edge))
   (multiple-value-bind (beg end) (find-field pos nil :beg-limit limit :beg t)
+    (declare (ignore end))
     beg))
 
 (defun field-end (&optional pos escape-from-edge limit)
@@ -189,7 +192,9 @@ If ESCAPE-FROM-EDGE is non-nil and POS is at the end of its field,
 then the end of the *following* field is returned.
 If LIMIT is non-nil, it is a buffer position; if the end of the field
 is after LIMIT, then LIMIT will be returned instead."
+  (declare (ignore escape-from-edge))
   (multiple-value-bind (beg end) (find-field pos nil :end-limit limit :end t)
+    (declare (ignore beg))
     end))
 
 (defun npropertize (string &rest props)

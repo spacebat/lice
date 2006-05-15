@@ -87,6 +87,7 @@ saving keyboard macros ***(see `insert-kbd-macro')."
 Prompt with prompt.  By default, return default-value."
   (let (cmds)
     (maphash (lambda (k v) 
+               (declare (ignore v))
 	       (push k cmds))
 	     *commands*)
     (dformat +debug-v+ "commands: ~s~%" cmds)
@@ -99,6 +100,7 @@ Prompt with prompt.
 Optional second arg def is value to return if user enters an empty line.
 *If optional third arg require-match is non-nil,
 * only existing buffer names are allowed."
+  (declare (ignore require-match))
   (let* ((bufs (mapcar (lambda (b)
                          (cons (buffer-name b) b))
                        *buffer-list*))
@@ -134,11 +136,9 @@ provides a file dialog box.
 
 See also `read-file-name-completion-ignore-case'
 and `read-file-name-function'."
-  ;; TODO: write the bugger
-  (read-from-minibuffer prompt))
+  (declare (ignore predicate initial mustmatch default-filename dir))
+  (completing-read prompt #'file-completions))
   
-  
-
 (defun region-limit (beginningp)
   "Return the start or end position of the region.
 BEGINNINGP non-zero means return the start.

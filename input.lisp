@@ -135,6 +135,7 @@ The value is a list of KEYs."
     (clear-minibuffer)
     (handler-case (funcall (command-fn cmd))
       (quit (c)
+        (declare (ignore c))
 	;; FIXME: debug-on-quit
         (message "Quit"))
       (lice-condition (c)
@@ -365,6 +366,7 @@ more."
     (define-key kmap (make-instance 'key :char #\d :meta t) 'kill-word)
     (define-key kmap (make-instance 'key :char #\Rubout :meta t) 'backward-kill-word)
     (define-key kmap (make-instance 'key :char #\Rubout) 'delete-backward-char)
+    (define-key kmap (make-instance 'key :char #\Delete) 'delete-backward-char)
     (define-key kmap (make-instance 'key :char #\t :meta t) 'transpose-words)
     (define-key kmap (make-instance 'key :char #\t :control t) 'transpose-chars)
     ;;(define-key kmap (make-instance 'key :char #\h :control t) 'delete-backward-char)

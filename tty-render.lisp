@@ -168,7 +168,7 @@ the text properties present."
 ;;; keyboard stuff
 
 (defmethod frame-read-event ((frame tty-frame))
-  (let-file ((ch (char-code (read-char)))
+  (let ((ch (char-code (read-char)))
 	key meta control)
     (dformat +debug-v+ "read: ~a~%" ch)
     ;; ESC mean Meta

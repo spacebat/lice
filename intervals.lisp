@@ -36,7 +36,8 @@ character that does not have its own value for that property.")
 ;; interval node is a list: (key left right &rest plist)
 
 (defun print-interval (i s d)
-  (format s"#S(interval ~s ~s ~s | ~s ~s)" 
+  (declare (ignore d))
+  (format s "#S(interval ~s ~s ~s | ~s ~s)" 
 	  (interval-pt i)
 	  (interval-length i)
 	  (interval-plist i)

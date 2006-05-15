@@ -155,6 +155,7 @@ If you set the marker not to point anywhere, the buffer will have no mark."
   (setf (buffer-markers buffer)
 	(delete-if (lambda (m)
 		     (multiple-value-bind (v c) (weak-pointer-value m)
+                       (declare (ignore v))
 		       (not c)))
 		   (buffer-markers buffer))))
 
@@ -264,7 +265,8 @@ buffer character."
 
 (defun buffer-min (buf)
   "The beginning of the buffer in char space."
-  (declare (type buffer buf))
+  (declare (type buffer buf)
+           (ignore buf))
   0)
 
 (defun buffer-max (buf)
@@ -371,6 +373,7 @@ buffer character."
 
 (defmethod buffer-insert :after ((buf buffer) object)
   "Any object insertion modifies the buffer."
+  (declare (ignore object))
   (setf (buffer-modified buf) t))
 
 (defmethod buffer-insert ((buf buffer) (char character))
@@ -694,8 +697,9 @@ The value is never nil."))
 (defun make-default-buffers ()
   "Called on startup. Create the default buffers, putting them in
 *buffer-list*."
-  (let ((messages (get-buffer-create "*messages*"))
-	(scratch (get-buffer-create "*scratch*")))
+  ;; for the side effect
+  (get-buffer-create "*messages*")
+  (let ((scratch (get-buffer-create "*scratch*")))
     (buffer-insert scratch ";; This buffer is for notes you don't want to save, and for Lisp evaluation.
 ;; If you want to create a file, visit that file with C-x C-f,
 ;; then enter the text in that file's own buffer.")
@@ -760,6 +764,7 @@ If the optional third argument FRAME is non-nil, use that frame's
 buffer list instead of the selected frame's buffer list.
 If no other buffer exists, the buffer `*scratch*' is returned.
 If BUFFER is omitted or nil, some interesting buffer is returned."
+  (declare (ignore frame))
   ;; TODO: honour FRAME argument
   (let* (vis
          (match (loop for b in *buffer-list*
@@ -778,6 +783,7 @@ If BUFFER is omitted or nil, some interesting buffer is returned."
 If optional argument FORCE is non-nil, access the mark value
 even if the mark is not currently active, and return nil
 if there is no mark at all."
+  (declare (ignore force))
   ;; FIXME: marks can't be inactive ATM
   (marker-position (mark-marker buffer)))
 

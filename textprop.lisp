@@ -142,6 +142,7 @@
 (defun add-properties (plist i object)
   "Add the properties in plist to interval I. OBJECT should be the
 string of buffer containing the interval."
+  (declare (ignore object))
   (let ((changed nil))
     (doplist (sym val plist changed)
       (let ((found (getf (interval-plist i) sym)))
@@ -239,7 +240,9 @@ into it."
   (add-text-properties start end (list property value) object))
 
 (defun remove-properties (plist list i object)
+  (declare (ignore object))
   (doplist (sym val plist)
+  (declare (ignore val))
     (remf sym (interval-plist i)))
   (dolist (sym list)
     (remf sym (interval-plist i))))
@@ -339,6 +342,7 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT.  */"
   (getf (text-properties-at position object) prop))
 
 (defun get-char-property-and-overlay (position prop object overlay)
+  (declare (ignore overlay))
   (get-text-property position prop object))
 
 (defun get-char-property (position prop &optional (object (current-buffer)))

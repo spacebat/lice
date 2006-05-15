@@ -70,9 +70,11 @@
 
 (defun resize-window (window amount &optional (dir :height))
   "grow or shrink window, resizing dependant windows as well."
-  (let* ((frame (frame-window-tree (frame-for-window window)))
-	 (sibling (tree-sibling frame window)))
-    ))
+  (declare (ignore window amount dir))
+;;   (let* ((frame (frame-window-tree (frame-for-window window)))
+;; 	 (sibling (tree-sibling frame window)))
+;;     )
+  )
 
 (defun current-buffer ()
   "Return the current buffer."
@@ -203,6 +205,7 @@ do not put this buffer at the front of the list of recently selected ones.
 
 **Note that the main editor command loop
 **selects the buffer of the selected window before each command."
+  (declare (ignore norecord))
   ;; FIXME: get NORECORD working
   (window-save-point (get-current-window))
   ;; FIXME: this doesn't make sure window-frame is current.
@@ -220,6 +223,7 @@ argument NOT-THIS-WINDOW is non-nil (interactively, with prefix arg).
 **Returns the window displaying BUFFER.
 **If `display-buffer-reuse-frames' is non-nil, and another frame is currently
 **displaying BUFFER, then simply raise that frame."
+  (declare (ignore frame))
   (setf buffer (get-buffer buffer))
   (let* ((cw (get-current-window))
 	 (w (or (window-tree-find-if (lambda (w)
@@ -243,6 +247,7 @@ of `display-buffer' for additional customization information.
 
 **Optional third arg NORECORD non-nil means
 **do not put this buffer at the front of the list of recently selected ones."
+  (declare (ignore norecord))
   ;; FIXME: honour NORECORD
   (setf buffer (if buffer
 		   (or (get-buffer buffer)
@@ -261,6 +266,7 @@ Optional arg nodisp non-nil means don't redisplay, just wait for input.
 Redisplay is preempted as always if input arrives, and does not happen
 if input is available before it starts.
 Value is t if waited the full time with no input arriving."
+  (declare (ignore seconds nodisp))
   ;; FIXME: actually sleep
   (frame-render (selected-frame)))
   

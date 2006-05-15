@@ -123,10 +123,10 @@ Whichever character you type to run this command is inserted."
     (when (> arg 0)
       (insert-move-point (current-buffer) (key-char *current-event*)))))
 
-(defcommand newline ((n)
+(defcommand newline ((&optional n)
 		     :prefix)
   "Insert N new lines."
-  (insert-move-point (current-buffer) (make-string n :initial-element #\Newline)))
+  (insert-move-point (current-buffer) (make-string (or n 1) :initial-element #\Newline)))
 
 (defcommand open-line ((n) :prefix)
   "Insert a newline and leave point before it.
@@ -134,7 +134,7 @@ Whichever character you type to run this command is inserted."
 **if the line would have been blank.
 With arg N, insert N newlines."
   (let ((loc (point)))
-    (dotimes (i n) (newline))
+    (dotimes (i n) (newline 1))
     (goto-char loc)))
 
 (defcommand next-line ((&optional (arg 1))

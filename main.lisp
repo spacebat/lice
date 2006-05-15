@@ -17,7 +17,7 @@
 	(init-command-arg-types)
 	(setf *frame-list* (list #+(or cmu sbcl) (make-default-tty-frame (get-buffer "*scratch*"))
 				 #+clisp (make-default-clisp-frame (get-buffer "*scratch*"))
-                                 #+ mcl (make-default-mcl-frame (get-buffer "*scratch*"))
+                                 #+mcl (make-default-mcl-frame (get-buffer "*scratch*"))
 				 #+movitz (make-default-movitz-frame (get-buffer "*scratch*")))
 	      *current-frame* (car *frame-list*))
 	;; for the scratch buffer

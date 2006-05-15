@@ -150,7 +150,8 @@ defaults."
   ;; looked up already.
   (declare (type window window)
            (type buffer buffer)
-           (type boolean keep-margins))
+           (type boolean keep-margins)
+           (ignore keep-margins))
   (let ((buf (get-buffer buffer)))
     (unless buf
       (error "No buffer named ~a" buffer))
@@ -442,6 +443,7 @@ above WINDOW-POINT, or as many as possible if we hit the top of the window."
 						  (- (window-height window)
 						     (min n-many 
 							  (length lines-above)))))))
+    (declare (ignore b))
     (if lines-below
         (add-end-of-buffer (window-buffer window) lines-below)
       (add-end-of-buffer (window-buffer window) lines-above))

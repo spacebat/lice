@@ -78,4 +78,21 @@
 	    (message "Wrote ~a~%" (buffer-file (current-buffer))))
 	(message "(No changes need to be saved)")))))
 
+(defun file-completions (base predicate other)
+  "Return a list of possible file completions given the base file, BASE. OTHER is not used."
+  (declare (ignore other))
+  ;; FIXME: they need to be strings
+  (let ((tester (or predicate
+		    (lambda (s)
+		      (string= base s :end2 (min (length base)
+                                                 (length s)))))))
+    (loop for elt in (mapcar 'princ-to-string (directory (merge-pathnames (make-pathname :name :wild) base)))
+       when (funcall tester elt)
+       collect elt)))
+
+(defcommand load-file ((file)
+                       (:file "Load file: "))
+  "Load the Lisp file named FILE."
+  (load file))
+
 (provide :lice-0.1/files)

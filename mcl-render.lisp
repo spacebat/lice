@@ -3,32 +3,46 @@
 (defclass mcl-window (ccl:window)
   ())
 
-(defclass mcl-frame (frame)
-  ((mcl-window :type window :initarg :mcl-window :accessor mcl-frame-window)
-   (double-buffer :type (array ccl:static-text-dialog-item 1) :initarg :double-buffer :accessor frame-double-buffer :documentation
+(defclass mcl-frame (frame mcl-window)
+  ((double-buffer :type (array character 1) :initarg :double-buffer :accessor frame-double-buffer :documentation
 		  "The display double buffer. This structure is compared to
 the characters we want to blit. Only differences are sent to the video
 hardware.")
-   (2d-double-buffer :type (array ccl:static-text-dialog-item 2) :initarg :2d-double-buffer :accessor frame-2d-double-buffer :documentation
+   (2d-double-buffer :type (array character 2) :initarg :2d-double-buffer :accessor frame-2d-double-buffer :documentation
 		     "Displaced from DISPLAY. This array is divided into rows and columns.")
-   ))
+   (cursor :initform #(0 0) :accessor mcl-frame-cursor)
+   (font-width :initarg :font-width :accessor mcl-frame-font-width)
+   (font-height :initarg :font-height :accessor mcl-frame-font-height)
+   (font-ascent :initarg :font-ascent :accessor mcl-frame-font-ascent)))
 
 (defmethod frame-start-render ((frame mcl-frame))
+  (declare (ignore frame))
   )
 
 (defmethod frame-end-render ((frame mcl-frame))
+  (declare (ignore frame))
   (ccl:event-dispatch))
 
 
 (defun window-move-cursor (window x y)
+  (declare (ignore window x y))
   )
 
 (defmethod frame-move-cursor ((frame mcl-frame) win x y)
+;;  (setf x (* x (mcl-frame-font-width frame))
+;;        y (+ (* y (mcl-frame-font-height frame)) 10))
+;;   (ccl:invert-rect frame x y (+ x (mcl-frame-font-width frame)) (+ y (mcl-frame-font-height frame)))
+  (setf (mcl-frame-cursor frame) (vector (+ (window-x win) x) (+ (window-y win) y)))
   (window-move-cursor win x y))
 
 (defun putch (ch x y window frame)
-  (ccl:set-dialog-item-text (aref (frame-2d-double-buffer frame) (+ y (window-y window)) (+ x (window-x window)))
-                            (string ch)))
+  ;; (0,0) is above the visible area of the window. so add 25 (experimentally determined).
+;;  (setf x (* x (mcl-frame-font-width frame))
+;;        y (+ (* y (mcl-frame-font-height frame)) 10))
+;;  (ccl:move-to (mcl-frame-window frame) x y)
+;;  (princ ch (mcl-frame-window frame))
+  (setf (aref (frame-2d-double-buffer frame) (+ y (window-y window)) (+ (window-x window) x)) ch)
+ )
 
 (defun putstr (s x y w frame)
   (loop for i from 0 below (length s)
@@ -46,18 +60,28 @@ hardware.")
 (defun clear-to-eol (y start window frame)
   (declare (type window window)
 	   (type fixnum y start))
-  (let ((display (frame-2d-double-buffer frame))
-	(linear (frame-double-buffer frame)))
+;;   (let ((display (frame-2d-double-buffer frame))
+;; 	(linear (frame-double-buffer frame)))
     (clear-line-between window y start (1- (window-width window)) frame)
     ;; draw the seperator
     (when (window-seperator window)
-      (putch #\| (+ (window-x window) (1- (window-width window t))) y window frame))))
+      (putch #\| (+ (window-x window) (1- (window-width window t))) y window frame)))
 
 (defun turn-on-attributes (buffer point)
+  (declare (ignore buffer point))
   )
+
+(defmethod frame-end-render ((frame mcl-frame))
+  (ccl:invalidate-view frame))
 
 (defmethod window-render (w (frame mcl-frame))
   "Render a window."
+  ;; clear the window
+  ;; (ccl:with-fore-color ccl:*white-color*
+;;     (ccl:paint-rect (mcl-frame-window frame)  0 0
+;;                     (ccl:point-h (ccl:view-size (mcl-frame-window frame)))
+;;                     (ccl:point-v (ccl:view-size (mcl-frame-window frame))))
+;;     (ccl:event-dispatch))
   (let ((p (buffer-char-to-aref (window-buffer w) (marker-position (window-top w))))
 	;; current point in buffer buffer
 	(bp (marker-position (window-top w)))		
@@ -70,6 +94,11 @@ hardware.")
 	(cache-size (length (lc-cache (window-cache w))))
 	(linear (frame-double-buffer frame))
 	(display (frame-2d-double-buffer frame)))
+    (declare (ignore display linear))
+    ;; clear the window
+;;     (ccl:erase-rect (mcl-frame-window frame) 0 0
+;;                     (ccl:point-h (ccl:view-size (mcl-frame-window frame)))
+;;                     (ccl:point-v (ccl:view-size (mcl-frame-window frame))))
     ;; Special case: when the buffer is empty
     (if (= (buffer-size (window-buffer w)) 0)
 	(progn 
@@ -134,26 +163,91 @@ hardware.")
     ;; Set the cursor at the right spot
     (values cursor-x cursor-y)))
 
-(defmethod frame-read-event ((frame mcl-frame))
-  (sleep 10)
-  (make-instance 'key
-                 :char #\a))
+(defvar *mcl-stackgroup* (ccl:make-stack-group "lice")
+  "")
+
+(defun mcl-lice ()
+  "Boot lice on mcl"
+  (ccl:stack-group-preset *mcl-stackgroup* #'lice)
+  (funcall *mcl-stackgroup* nil))
+
+(ccl:defrecord Event
+    (what integer)
+  (message longint)
+  (when longint)
+  (where point)
+  (modifiers integer))
 
 (defvar *mcl-key-list* nil
   "List of keys pressed.")
 
-(defmethod view-key-event-handler :after ((w mcl-window) ch)
-  (format t "LICE keypress: ~a~%" ch)
-  (push ch *mcl-key-list*))
+(defmethod ccl:view-key-event-handler :after ((w mcl-window) ch)
+  (declare (ignore ch))
+  (let* ((keystroke (ccl:keystroke-name (ccl:event-keystroke (ccl:rref ccl:*current-event* :event.message) (ccl:rref ccl:*current-event* :event.modifiers))))
+         (ch (if (listp keystroke)
+                 (car (last keystroke))
+                 keystroke))
+         (mods (and (listp keystroke)
+                    (butlast keystroke))))
+    ;;(format t "k: ~s ~s ~s~%" keystroke ch mods)
+    (setf *mcl-key-list* (nconc *mcl-key-list* 
+                                (list (make-instance 'key
+                                                     :meta (and (find :meta mods) t)
+                                                     :control (and (find :control mods) t)
+                                                     :char ch))))
+    (funcall *mcl-stackgroup* nil)))
+
+(defmethod ccl:view-draw-contents ((win frame))
+  (ccl:erase-rect win 0 0
+                  (ccl:point-h (ccl:view-size win))
+                  (ccl:point-v (ccl:view-size win)))
+  ;; characters
+  (loop
+     for y from 0 below (array-dimension (frame-2d-double-buffer win) 0)
+     for i from (mcl-frame-font-ascent win) by (mcl-frame-font-height win) do
+       (loop 
+          for x from 0 below (array-dimension (frame-2d-double-buffer win) 1)
+          for j from 0 by (mcl-frame-font-width win) do 
+            (ccl:move-to win j i)
+            (princ (aref (frame-2d-double-buffer win) y x) win)))
+  ;; point
+  (let ((x (* (elt (mcl-frame-cursor win) 0) (mcl-frame-font-width win)))
+        (y (* (elt (mcl-frame-cursor win) 1) (mcl-frame-font-height win))))
+    (ccl:invert-rect win x y (+ x (mcl-frame-font-width win)) (+ y (mcl-frame-font-height win)))))
+
+(defmethod frame-read-event ((frame mcl-frame))
+  ;; wait for more input
+  (unless *mcl-key-list*
+    (ccl:stack-group-return nil))
+  ;; process the new input
+  (pop *mcl-key-list*))
+
+(defun mcl-font-width (font-name font-size)
+  (multiple-value-bind (ascent descent maxwidth leading) (ccl::font-info (list font-name font-size))
+    (declare (ignore ascent descent leading))
+    maxwidth))
+
+(defun mcl-font-height (font-name font-size)
+  (multiple-value-bind (ascent descent maxwidth leading) (ccl::font-info (list font-name font-size))
+    (declare (ignore maxwidth))
+    (+ ascent descent leading)))
+
+(defun mcl-font-ascent (font-name font-size)
+  (multiple-value-bind (ascent descent maxwidth leading) (ccl::font-info (list font-name font-size))
+    (declare (ignore descent maxwidth leading))
+    ascent))
 
 (defun make-default-mcl-frame (buffer)
   (let* ((lines 25)
 	 (height (1- lines))
+         (fw (mcl-font-width "Monaco" 12))
+         (fh (mcl-font-height "Monaco" 12))
+         (ascent (mcl-font-ascent "Monaco" 12))
 	 (cols 80)
 	 (l (make-array (* lines cols)
-			:element-type 'ccl:static-text-dialog-item))
+			:element-type 'character))
 	 (d (make-array (list lines cols)
-			:element-type 'ccl:static-text-dialog-item
+			:element-type 'character
 			:displaced-to l :displaced-index-offset 0))
 	 (w (make-window :x 0 :y 0 :cols cols :rows height :buffer buffer))
 	 (mb (make-minibuffer-window lines cols))
@@ -165,14 +259,11 @@ hardware.")
 			       :minibuffer-window mb
 			       :double-buffer l
 			       :2d-double-buffer d
-                               :mcl-window (make-instance 'mcl-window
-                                                          :view-size (ccl:make-point (* cols 11) (* lines 16))))))
-    (dotimes (i (* cols lines))
-      (setf (aref (frame-double-buffer frame) i) (make-instance 'ccl:static-text-dialog-item
-                                                            :view-font '("Monaco" 12)
-                                                            :view-container (mcl-frame-window frame)
-                                                            :view-position (ccl:make-point (* (multiple-value-bind (q r) (truncate i cols) r) 11) (* (truncate i cols) 16))
-                                                            :dialog-item-text (make-string 1 :initial-element #\-))))
+                               :font-height fh
+                               :font-width fw
+                               :font-ascent ascent
+                               :view-size (ccl:make-point (* cols fw) (* lines fh))
+                               :view-font '("Monaco" 12))))
     (setf (window-frame w) frame
 	  (window-frame mb) frame)
     frame))

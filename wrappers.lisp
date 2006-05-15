@@ -9,7 +9,8 @@
 ;;; Weak Pointers
 
 (defun weak-pointer-p (wp)
-  #+clisp (ext:weak-pointer-p (wp)))
+  #+clisp (ext:weak-pointer-p (wp))
+  #-(or clisp) (declare (ignore wp)))
 
 (defun make-weak-pointer (data)
   #+clisp (ext:make-weak-pointer data)

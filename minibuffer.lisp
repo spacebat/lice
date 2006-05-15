@@ -106,7 +106,8 @@ used by that frame."
 (defun show-minibuffer-prompt (frame prompt)
   "Show PROMPT in the minibuffer. Flip a bit in FRAME to allow
 switching to the minibuffer."
-  (declare (type string prompt))
+  (declare (type string prompt)
+           (ignore frame))
   (let ((minibuffer (window-buffer (frame-minibuffer-window (selected-frame))))
 	(field (npropertize prompt 'field 't 'front-sticky t 'rear-nonsticky t)))
     (dformat +debug-v+ "~a~%" field)
@@ -144,6 +145,7 @@ MINIBUF must be a minibuffer."
       (delete-region end (zv minibuf)))))
 
 (defun setup-minibuffer-for-read (major-mode prompt initial-contents history)
+  (declare (ignore initial-contents))
   (save-window-excursion
     ;; Create a new minibuffer
     (let* ((frame (selected-frame))
@@ -236,6 +238,7 @@ POSITION in the minibuffer.  Any integer value less than or equal to
 one puts point at the beginning of the string.  *Note* that this
 behavior differs from the way such arguments are used in `completing-read'
 and some related functions, which use zero-indexing for POSITION."
+  (declare (ignore default-value read keymap))
   (setup-minibuffer-for-read minibuffer-read-mode prompt initial-contents history))
 
 (defun tree-find (tree obj &key (test #'eq))
@@ -279,6 +282,7 @@ and some related functions, which use zero-indexing for POSITION."
   (:documentation "Return a list of possible matches."))
 
 (defmethod all-completions (string (alist list) &optional predicate hide-spaces)
+  (declare (ignore hide-spaces))
   (let ((tester (or predicate
 		    (lambda (s)
 		      (string= string s :end2 (min (length string)
@@ -294,6 +298,10 @@ and some related functions, which use zero-indexing for POSITION."
 			(t elt))
 	  when (funcall tester i)
 	  collect i)))
+
+(defmethod all-completions (string (fn function) &optional predicate hide-spaces)
+  (declare (ignore hide-spaces))
+  (funcall fn string predicate nil))
 
 (defun try-completion (string alist &optional predicate)
   (labels ((all-are-good (match strings)
@@ -443,6 +451,7 @@ HISTORY, if non-nil, specifies a history list
   which INITIAL-INPUT corresponds to).
   Positions are counted starting from 1 at the beginning of the list.
 DEF, if non-nil, is the default value."
+  (declare (ignore require-match def))
   (let ((*minibuffer-completion-table* table)
 	(*minibuffer-completion-predicate* predicate))
     (setup-minibuffer-for-read minibuffer-complete-mode prompt initial-input history)))
