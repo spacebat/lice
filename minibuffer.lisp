@@ -32,6 +32,23 @@ in this use of the minibuffer.")
 (define-major-mode minibuffer-complete-mode
   (:name "minibuffer mode"
    :map (let ((m (make-sparse-keymap)))
+	  (define-key m (make-instance 'key :char #\m :control t) 'minibuffer-exit)
+	  (define-key m (make-instance 'key :char #\Newline) 'minibuffer-exit)
+	  (define-key m (make-instance 'key :char #\Return) 'minibuffer-exit)
+          (define-key m (make-instance 'key :char #\j :control t) 'minibuffer-exit)
+          (define-key m (make-instance 'key :char #\p :meta t) 'previous-history-element)
+          (define-key m (make-instance 'key :char #\n :meta t) 'next-history-element)
+          (define-key m (make-instance 'key :char #\i :control t) 'minibuffer-complete)
+          (define-key m (make-instance 'key :char #\Tab) 'minibuffer-complete)
+	  (define-key m (make-instance 'key :char #\g :control t) 'abort-recursive-edit)
+	  m))
+  "minibuffer complete mode"
+  ;; empty init
+  )
+
+(define-major-mode minibuffer-must-match-mode
+  (:name "minibuffer mode"
+   :map (let ((m (make-sparse-keymap)))
 	  (define-key m (make-instance 'key :char #\m :control t) 'minibuffer-complete-and-exit)
 	  (define-key m (make-instance 'key :char #\Newline) 'minibuffer-complete-and-exit)
 	  (define-key m (make-instance 'key :char #\Return) 'minibuffer-complete-and-exit)
@@ -137,6 +154,14 @@ If MINIBUF is omitted, default to the current buffer.
 MINIBUF must be a minibuffer."
   (buffer-substring-no-properties (minibuffer-prompt-end minibuf) (zv minibuf) minibuf))
 
+(defun minibuffer-completion-contents (&optional (minibuf (current-buffer)))
+  "Return the user input in a minibuffer before point as a string.
+That is what completion commands operate on.
+The current buffer must be a minibuffer."
+  ;; FIXME: the emacs source produces an error when the pt is not at
+  ;; the end. I Don't know why, though.
+  (buffer-substring (minibuffer-prompt-end minibuf) (zv minibuf) minibuf))
+
 (defun delete-minibuffer-contents (&optional (minibuf (current-buffer)))
   "Delete all user input in a minibuffer.
 MINIBUF must be a minibuffer."
@@ -196,6 +221,25 @@ MINIBUF must be a minibuffer."
       (set-window-buffer (frame-minibuffer-window frame) old-minibuffer)
       (kill-buffer new-minibuffer)
       (decf (frame-minibuffers-active frame))))))
+
+(defun test-completion (string alist &optional predicate)
+  "Return non-nil if string is a valid completion.
+Takes the same arguments as `all-completions' and `try-completion'.
+If alist is a function, it is called with three arguments:
+the values string, predicate and `lambda'."
+  (let ((matches (all-completions string alist predicate)))
+    (and (= (length matches) 1)
+         (string= (first matches) string))))
+
+(defcommand minibuffer-complete-and-exit ()
+  "If the minibuffer contents is a valid completion then exit.
+Otherwise try to complete it.  If completion leads to a valid completion,
+a repetition of this command will exit."
+  (let ((str (minibuffer-contents)))
+    (if (test-completion str *minibuffer-completion-table* *minibuffer-completion-predicate*)
+        (throw 'exit nil)
+        (minibuffer-complete))))
+
 
 (defun read-from-minibuffer (prompt &key initial-contents keymap read (history '*minibuffer-history*) default-value)
   "Read a string from the minibuffer, prompting with string PROMPT.
@@ -324,10 +368,6 @@ and some related functions, which use zero-indexing for POSITION."
                    (decf (fill-pointer match))
                    (return)))
 	match))))
-
-(defcommand minibuffer-complete-and-exit ()
-  ;; FIXME: this should be done properly
-  (throw 'exit nil))
   
 (defvar *minibuffer-completion-table* nil
   "Alist or obarray used for completion in the minibuffer.
@@ -451,10 +491,13 @@ HISTORY, if non-nil, specifies a history list
   which INITIAL-INPUT corresponds to).
   Positions are counted starting from 1 at the beginning of the list.
 DEF, if non-nil, is the default value."
-  (declare (ignore require-match def))
+  (declare (ignore def))
   (let ((*minibuffer-completion-table* table)
 	(*minibuffer-completion-predicate* predicate))
-    (setup-minibuffer-for-read minibuffer-complete-mode prompt initial-input history)))
+    (setup-minibuffer-for-read (if require-match
+                                   minibuffer-must-match-mode
+                                   minibuffer-complete-mode)
+                               prompt initial-input history)))
 
 ;; (defun y-or-n-p (prompt)
 ;;   "Ask user a \"y or n\" question.  Return t if answer is \"y\".
