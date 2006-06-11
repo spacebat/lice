@@ -80,7 +80,8 @@
   "Return the current buffer."
   ;; FIXME: maybe this should just return *current-buffer*
   (or *current-buffer*
-      (window-buffer (frame-current-window (selected-frame)))))
+      ;; (window-buffer (frame-current-window (selected-frame)))
+      ))
 
 (defun active-minibuffer-window ()
   "Return the currently active minibuffer window or nil if there isn't

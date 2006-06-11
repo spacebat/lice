@@ -128,7 +128,7 @@ Fifth arg initial specifies text to start with.
 If optional sixth arg predicate is non-nil, possible completions and
 the resulting file name must satisfy (funcall predicate NAME).
 dir should be an absolute directory name.  It defaults to the value of
-`default-directory'.
+`:default-directory'.
 
 If this command was invoked with the mouse, use a file dialog box if
 `use-dialog-box' is non-nil, and the window system or X toolkit in use
@@ -137,7 +137,7 @@ provides a file dialog box.
 See also `read-file-name-completion-ignore-case'
 and `read-file-name-function'."
   (declare (ignore predicate initial mustmatch default-filename dir))
-  (completing-read prompt #'file-completions :initial-input (princ-to-string *default-directory*)))
+  (completing-read prompt #'file-completions :initial-input (princ-to-string (buffer-local :default-directory))))
 
 (defun read-string (prompt &optional initial-input history default-value)
   "Read a string from the minibuffer, prompting with string prompt.

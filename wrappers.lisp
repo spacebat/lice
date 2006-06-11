@@ -24,4 +24,27 @@
   #+sbcl (sb-ext:weak-pointer-value wp)
   #+(or movitz mcl) (values wp t))
 
+;;; Some wrappers for access to filesystem things. file type, file
+;;; size, ownership, modification date, mode, etc
+
+(defun file-stats (pathname)
+  "Return some file stats"
+  #+sbcl
+  (let ((stat (sb-posix:lstat pathname)))
+    (values (sb-posix:stat-mode stat)
+	    (sb-posix:stat-size stat)
+	    (sb-posix:stat-uid stat)
+	    (sb-posix:stat-gid stat)
+	    (sb-posix:stat-mtime stat)))
+  #+clisp
+  (let ((stat (sys::file-stat pathname)))
+    (values (butlast (sys::file-stat-mode stat))
+	    (sys::file-stat-size stat)
+	    (sys::file-stat-uid stat)
+	    (sys::file-stat-gid stat)
+	    (sys::file-stat-mtime stat)))
+  #-(or sbcl clisp)
+  (error "Not implemented"))
+
 (provide :lice-0.1/wrappers)
+
