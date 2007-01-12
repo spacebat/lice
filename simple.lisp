@@ -263,9 +263,9 @@ with SIGHUP."
 
 (defcommand eval-expression ((s)
 			     (:string "Eval: "))
-  (handler-case 
-      (eval-echo s)
-    (error (c) (message "Eval error: ~s" c))))
+  ;;(handler-case 
+      (eval-echo s))
+    ;;(error (c) (message "Eval error: ~s" c))))
 
 (defcommand exchange-point-and-mark ()
   (let ((p (point)))
@@ -326,24 +326,6 @@ of the accessible part of the buffer."
 		(split-window cw))))
     (select-window w)
     (switch-to-buffer buffer)))
-
-(defcommand delete-other-windows ()
-  (let* ((frame (selected-frame))
-	 (cw (get-current-window))
-	 (mb (window-tree-find-if (lambda (w)
-				    (typep w 'minibuffer-window))
-				  (frame-window-tree frame)
-				  t)))
-    ;; FIXME: This doesn't properly refresh and the window's display
-    ;; arrays aren't resized.
-    (setf (window-x cw) 0
-	  (window-y cw) 0
-	  (window-seperator cw) nil
-	  (slot-value cw 'w) (frame-width frame)
-	  (slot-value cw 'h) (- (frame-height frame) (window-height mb t))
-	  (frame-window-tree frame) (list cw mb))
-    ;;(update-window-display-arrays cw)
-    ))
 
 (defcommand keyboard-quit ()
   (signal 'quit))

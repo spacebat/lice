@@ -668,4 +668,40 @@ LINES many lines, moving the window point to be visible."
   (setf (marker-position (buffer-point (window-buffer window)))
 	(marker-position (window-bpoint window))))
 
+(defcommand delete-other-windows ()
+  (let* ((frame (selected-frame))
+	 (cw (get-current-window))
+	 (mb (window-tree-find-if (lambda (w)
+				    (typep w 'minibuffer-window))
+				  (frame-window-tree frame)
+				  t)))
+    ;; FIXME: This doesn't properly refresh and the window's display
+    ;; arrays aren't resized.
+    (setf (window-x cw) 0
+	  (window-y cw) 0
+	  (window-seperator cw) nil
+	  (slot-value cw 'w) (frame-width frame)
+	  (slot-value cw 'h) (- (frame-height frame) (window-height mb t))
+	  (frame-window-tree frame) (list cw mb))
+    ;;(update-window-display-arrays cw)
+    ))
+
+(defun window-parent (window)
+  "Return the parent list in frame-window-tree for WINDOW."
+  (labels ((parent-of (tree parent window)
+	     (cond ((listp tree)
+		    (loop for i in tree
+		       thereis (parent-of i tree window)))
+		   (t 
+		    (when (eq tree window)
+		      parent)))))
+    (parent-of (frame-window-tree (window-frame window)) nil window)))
+
+(defun delete-window (&optional (window (selected-window)))
+  (check-type window window)
+  (when (or (typep window minibuffer-window)
+	    (typep (frame-window-tree frame) 'window))
+    (error "Attempt to delete minibuffer or sole ordinary window")))
+
+
 (provide :lice-0.1/window)

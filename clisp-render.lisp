@@ -15,7 +15,8 @@ hardware.")
   )
 
 (defmethod frame-end-render ((frame clisp-frame))
-  (screen:window-refresh (frame-window-stream frame)))
+  ;; (screen:window-refresh (frame-window-stream frame))
+  )
 
 ;; This has to be defined (it should be a generic function)
 (defun window-move-cursor (window x y window-stream)
@@ -144,14 +145,14 @@ the text properties present."
 ;;; keyboard stuff
 
 (defmethod frame-read-event ((frame clisp-frame))
-  (let* ((input (screen:read-keyboard-char (frame-window-stream frame)))
+  (let* ((input (read-char EXT:*KEYBOARD-INPUT*));; (input (screen::read-keyboard-char (frame-window-stream frame)))
 	 (ch (if (sys::input-character-char input) 
 				 (char-downcase (sys::input-character-char input))
 			       (char-downcase (sys::input-character-key input))))
 	 meta)
     (when (and (characterp ch)
 	       (char= ch #\Escape))
-      (setf input (screen:read-keyboard-char (frame-window-stream frame))
+      (setf input (read-char EXT:*KEYBOARD-INPUT*)
 	    meta t))
     (make-instance 'key
 		   :char (if (sys::input-character-char input) 

@@ -778,7 +778,7 @@ See also `with-temp-buffer'."
   (let ((bk (gensym "BK")))
     `(progn
        (let ((,bk *current-buffer*))
-	 (set-buffer buffer)
+	 (set-buffer ,buffer)
 	 (unwind-protect
 	      (progn ,@body)
 	   (set-buffer ,bk))))))
@@ -872,10 +872,11 @@ Use `switch-to-buffer' or `pop-to-buffer' to switch buffers permanently."
   (setf buffer (get-buffer buffer))
   (if buffer
       (progn
-	(record-local-variables *current-buffer*)
+	(when *current-buffer*
+	  (record-local-variables *current-buffer*))
 	(set-local-variables buffer)
 	(setf *current-buffer* buffer))
-    (error "No buffer named ~s" buffer)))
+      (error "No buffer named ~s" buffer)))
 
 (defun record-buffer (buffer)
   "**Move the assoc for buffer BUF to the front of buffer-alist.  
@@ -907,7 +908,7 @@ Other buffers will continue to share a common default value.
  (The buffer-local value of variable starts out as the same value
 variable previously had.)
 Return variable."
-  (setf (gethash (buffer-local-variables *current-buffer*) symbol) 
+  (setf (gethash symbol (buffer-local-variables (current-buffer))) 
 	(make-local-variable-binding :value (symbol-value symbol)))
   symbol)
 

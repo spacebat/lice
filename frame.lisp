@@ -80,7 +80,7 @@
   "Return the current buffer."
   ;; FIXME: maybe this should just return *current-buffer*
   (or *current-buffer*
-      ;; (window-buffer (frame-current-window (selected-frame)))
+      ;;(window-buffer (frame-current-window (selected-frame)))
       ))
 
 (defun active-minibuffer-window ()
@@ -127,6 +127,18 @@ one."
     (doit (frame-window-tree (window-frame window))
 	  window
 	  new)))
+
+;; (defun replace-window-parent-in-frame-tree (window new)
+;;   (labels ((doit (tree parent window new)
+;; 	     (when (listp tree)
+;; 	       (let (loop for i in (remove-if-not 'listp tree)
+;; 		      thereis (find window i))
+;; 		   (parent
+;; 		   (
+;; 		   )))
+;;     (doit (frame-window-tree (window-frame window))
+;; 	  window
+;; 	  new)))
 
 (defun split-window (&optional (window (get-current-window)) size horflag)
   (when (typep window 'minibuffer-window)
@@ -270,6 +282,5 @@ Value is t if waited the full time with no input arriving."
   (declare (ignore seconds nodisp))
   ;; FIXME: actually sleep
   (frame-render (selected-frame)))
-  
 
 (provide :lice-0.1/frame)

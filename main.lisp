@@ -21,16 +21,19 @@
 				 #+movitz (make-default-movitz-frame (get-buffer "*scratch*")))
 	      *current-frame* (car *frame-list*))
 	;; for the scratch buffer
+	(set-buffer (get-buffer "*scratch*"))
 	(set-major-mode lisp-interaction-mode)
 	(make-global-keymaps)
 	(catch 'lice-quit 
 	  #+clisp
 	  (ext:with-keyboard
-	   (loop
-	    (recursive-edit)))
+	      (loop
+		 (with-simple-restart (recursive-edit-top-level "Return to LiCE top level")
+		   (recursive-edit))))
 	  #-clisp
 	  (loop
-	   (recursive-edit))))
+	     (with-simple-restart (recursive-edit-top-level "Return to LiCE top level")
+	       (recursive-edit)))))
     (progn 
       #+(or cmu sbcl) (shutdown-tty)
       #+clisp (shutdown)
