@@ -94,8 +94,13 @@ If you set the marker not to point anywhere, the buffer will have no mark."
 (defvar *global-buffer-locals* (make-hash-table)
   "The default values of buffer locals and a hash table containing all possible buffer locals")
 
+(defun buffer-local-exists-p (symbol)
+  (multiple-value-bind (v b) (gethash symbol *global-buffer-locals*)
+    (declare (ignore v))
+    b))  
+
 (defun make-buffer-local (symbol default-value &optional doc-string)
-  (unless (gethash symbol *global-buffer-locals*)
+  (unless (buffer-local-exists-p symbol)
     (setf (gethash symbol *global-buffer-locals*)
 	  (make-buffer-local-binding :symbol symbol
 				     :value default-value
@@ -110,8 +115,9 @@ docstring for them. there is also `make-buffer-local'."
 
 (defun (setf buffer-local) (symbol value)
   "Set the value of the buffer local in the current buffer."
-  ;; FIXME: should we implicitely make a global one if it doesn't exist already?
-  (setf (gethash symbol (buffer-locals *current-buffer*)) value))
+  (setf (gethash symbol (buffer-locals *current-buffer*)) value)
+  ;; create a global buffer local entry if needed.
+  (make-buffer-local symbol nil))
 
 (defun buffer-local (symbol)
   "Return the value of the buffer local symbol. If none exists
@@ -120,7 +126,9 @@ exist, return nil."
   (multiple-value-bind (v b) (gethash symbol (buffer-locals *current-buffer*))
     (if b
 	v
-	(gethash symbol *global-buffer-locals*))))
+	(multiple-value-bind (v b) (gethash symbol *global-buffer-locals*)
+	  (when b
+	    (buffer-local-binding-value v))))))
 
 
 ;;; buffer related conditions

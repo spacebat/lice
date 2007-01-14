@@ -10,7 +10,8 @@ buffer."
     (insert 
      (with-output-to-string (s)
        (let ((*debug-io* s)
-	     (*error-output* s))
+	     (*error-output* s)
+	     (*standard-output* s))
 	 (asdf:oos op :lice)))))
   (display-buffer "*lice-reload*"))
 

@@ -19,7 +19,8 @@
 				 #+clisp (make-default-clisp-frame (get-buffer "*scratch*"))
                                  #+mcl (make-default-mcl-frame (get-buffer "*scratch*"))
 				 #+movitz (make-default-movitz-frame (get-buffer "*scratch*")))
-	      *current-frame* (car *frame-list*))
+	      *current-frame* (car *frame-list*)
+	      *process-list* nil)
 	;; for the scratch buffer
 	(set-buffer (get-buffer "*scratch*"))
 	(set-major-mode lisp-interaction-mode)
