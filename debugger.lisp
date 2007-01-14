@@ -19,7 +19,7 @@
   (pop-to-buffer (get-buffer-create "*debugger*"))
   (erase-buffer)
   (set-major-mode debugger-mode)
-  (insert (format nil "Debugger~%~%~a~%~{~a~%~}" condition (compute-restarts)))
+  (insert (format nil "Debugger~%~a~%~%~a~%~{~a~%~}" (backtrace-as-string) condition (compute-restarts)))
   (recursive-edit)
   ;; if we exit the recursive edit we'll fall into the regular debugger.
   )
