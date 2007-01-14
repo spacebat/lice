@@ -140,12 +140,12 @@ The value is a list of KEYs."
         (message "Quit"))
       (lice-condition (c)
         (message "~a" c))
-;;       (error (c)
-;; 	;; FIXME: lice has no debugger yet, so use the lisp's
-;; 	;; debugger.
-;; 	(if *debug-on-error*
-;; 	    (error c)
-;; 	  (message "~a" c)))
+      ;;       (error (c)
+      ;; 	;; FIXME: lice has no debugger yet, so use the lisp's
+      ;; 	;; debugger.
+      ;; 	(if *debug-on-error*
+      ;; 	    (error c)
+      ;; 	  (message "~a" c)))
       )
     (setf *last-command* *this-command*
 	  ;; reset command keys, since the command is over.
@@ -277,11 +277,28 @@ recognize the default bindings, just as `read-key-sequence' does."
 (defconstant +key-tab+ 0407)
 (defconstant +key-escape+ 27)
 
+(defun wait-for-event ()
+  (loop
+     for event = (frame-read-event (selected-frame))
+     for procs = (poll-processes) do
+     (cond (event
+	    (return event))
+	   ;; handle subprocesses
+	   (procs
+	    (dispatch-processes procs)
+	    (frame-render (selected-frame))))
+     ;; FIXME: Yes, I'd love to be able to sleep until there was
+     ;; activity on one of the streams lice is waiting for input on
+     ;; but i don't know how to do that. So just sleep for a tiny
+     ;; bit to pass control over to the operating system and then
+     ;; check again.
+     (sleep 0.01)))
+
 ;; This is really TTY specific
 (defun next-event ()
   (let* ((*current-event* (if *unread-command-events*
 			      (pop *unread-command-events*)
-			    (frame-read-event (selected-frame))))
+			      (wait-for-event)))
 	 (def (if *current-kmap*
 		  (lookup-key *current-kmap* *current-event* t)
 		;; no current kmap? 
@@ -387,6 +404,7 @@ more."
     (define-key kmap (make-instance 'key :char #\: :meta t) 'eval-expression)
     (define-key kmap (make-instance 'key :char #\Space :control t) 'set-mark-command)
     (define-key kmap (make-instance 'key :char #\` :control t) 'set-mark-command)
+    (define-key kmap (make-instance 'key :char #\! :meta t) 'shell-command)
     (define-key kmap (make-instance 'key :char #\x :control t) ctl-x-prefix)
     (define-key kmap (make-instance 'key :char #\c :control t) ctl-c-prefix)
     (define-key kmap (make-instance 'key :char #\h :control t) ctl-h-prefix)

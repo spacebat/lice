@@ -46,5 +46,43 @@
   #-(or sbcl clisp)
   (error "Not implemented"))
 
+;;; subprocesses
+
+(defun run-program (program args &key (output :stream) (error :stream) (input :stream) (sentinel nil))
+  #+sbcl (let ((p (sb-ext:run-program program args :output output :error error :input input :status-hook sentinel)))
+	   (values p
+		   (sb-ext:process-input p)
+		   (sb-ext:process-output p)
+		   (sb-ext:process-error p)))
+  #-sbcl (error "Not implemented"))
+
+(defun internal-process-alive-p (process)
+  #+sbcl (sb-ext:process-alive-p process)
+  #-sbcl (error "Not implemented"))
+
+;;; environment
+
+(defun getenv (var)
+  "Return the value of the environment variable."
+  #+clisp (ext:getenv (string var))
+  #+sbcl (sb-posix:getenv (string var))
+  #-(or clisp sbcl)
+  (error "Not implemented"))
+
+;;; debugger
+
+(defun backtrace-as-string (&optional (depth most-positive-fixnum))
+  (with-output-to-string (s)
+    #+sbcl (sb-debug:backtrace depth s)
+    #-(or sbcl)
+    (error "Not implemented")))
+
+;;; threads
+
+(defun make-thread (function)
+  #+sbcl (sb-thread:make-thread function)
+  #-(or sbcl)
+  (error "Not implemented"))
+
 (provide :lice-0.1/wrappers)
 
