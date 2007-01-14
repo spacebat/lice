@@ -168,36 +168,37 @@ the text properties present."
 ;;; keyboard stuff
 
 (defmethod frame-read-event ((frame tty-frame))
-  (let ((ch (char-code (read-char)))
-	key meta control)
-    (dformat +debug-v+ "read: ~a~%" ch)
-    ;; ESC mean Meta
-    (when (= ch +key-escape+)
-      (dformat +debug-v+ "meta~%")
-      (setf ch (char-code (read-char))
-	    meta t))
-    ;; the 8th bit could also mean meta
-    (when (= (logand ch 128) 128)
-      (decf ch 128)
-      (setf meta t))
-    ;; <27 means Control
-    (when (< ch 27)
-      (incf ch 96)
-      (setf control t))
-    ;; set key to the character
-    (setf key (case ch
-		(+key-backspace+
-		 #\Backspace)
-		(+key-enter+
-		 #\Return)
-		(+key-tab+
-		 #\Tab)
-		(t
-		 (code-char ch))))
-    (make-instance 'key
-		   :char key
-		   :control control
-		   :meta meta)))
+  (when (listen *standard-input*)
+    (let ((ch (char-code (read-char)))
+	  key meta control)
+      (dformat +debug-v+ "read: ~a~%" ch)
+      ;; ESC mean Meta
+      (when (= ch +key-escape+)
+	(dformat +debug-v+ "meta~%")
+	(setf ch (char-code (read-char))
+	      meta t))
+      ;; the 8th bit could also mean meta
+      (when (= (logand ch 128) 128)
+	(decf ch 128)
+	(setf meta t))
+      ;; <27 means Control
+      (when (< ch 27)
+	(incf ch 96)
+	(setf control t))
+      ;; set key to the character
+      (setf key (case ch
+		  (+key-backspace+
+		   #\Backspace)
+		  (+key-enter+
+		   #\Return)
+		  (+key-tab+
+		   #\Tab)
+		  (t
+		   (code-char ch))))
+      (make-instance 'key
+		     :char key
+		     :control control
+		     :meta meta))))
 
 ;;; some frame stuff
 
