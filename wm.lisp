@@ -66,7 +66,8 @@
 					  (restore-tree (second tree)))))))
       (setf (frame-window-tree frame) (cons (restore-tree (frame-bk-window-tree configuration))
 					    (cdr (frame-window-tree frame)))
-	    (frame-current-window frame) cw))))
+	    (frame-current-window frame) cw)
+      (set-buffer (window-buffer cw)))))
 
 (defmacro save-window-excursion (&body body)
   "Execute body, preserving window sizes and contents.

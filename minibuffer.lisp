@@ -179,13 +179,13 @@ MINIBUF must be a minibuffer."
 			  (and (consp hist-val)
 			       (not (equal hist-string (car hist-val)))))
 		  (push hist-string hist-val)
-		  (setf *minibuffer-history-variable* hist-val))
+		  (setf (symbol-value *minibuffer-history-variable*) hist-val))
 		;; truncate if requested
 		(let ((len (or (get *minibuffer-history-variable* :history-length)
 			       *history-length*)))
 		  (when (integerp len)
 		    (if (< len 0)
-			(setf *minibuffer-history-variable* nil)
+			(setf (symbol-value *minibuffer-history-variable*) nil)
 		      (let ((tmp (nthcdr len hist-val)))
 			(when tmp
 			  (rplacd tmp nil))))))))
