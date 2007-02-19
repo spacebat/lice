@@ -279,16 +279,22 @@ recognize the default bindings, just as `read-key-sequence' does."
 
 (defun wait-for-event ()
   ;; don't let the user C-g when reading for input
-  (let ((*inhibit-quit* t))
+  (let ((*waiting-for-input* t))
     (loop
        for event = (frame-read-event (selected-frame))
        for procs = (poll-processes) do
+       ;; they hit the interrupt key so simulate that key press
+       (when *quit-flag*
+         (setf *quit-flag* nil
+               event (make-instance 'key
+                                    :char (code-char (+ *quit-code* 96))
+                                    :control t)))
        (cond (event
               (return event))
              ;; handle subprocesses
              (procs
               ;; let the user break out of this stuff
-              (let ((*inhibit-quit* nil))
+              (let ((*waiting-for-input* nil))
                 (dispatch-processes procs)
                 (frame-render (selected-frame)))))
        ;; FIXME: Yes, I'd love to be able to sleep until there was

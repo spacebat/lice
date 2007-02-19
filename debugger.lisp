@@ -16,7 +16,9 @@
   (declare (ignore old-debugger-value))
   ;; maybe continue a sigint
   (when (and (typep condition 'user-break)
-             *inhibit-quit*)
+             (or *inhibit-quit*
+                 *waiting-for-input*))
+    (setf *quit-flag* t)
     (continue))
   ;; make sure we're not in the minibuffer
   (select-window (first (frame-window-list *current-frame*)))

@@ -99,7 +99,11 @@ so a quit will be signaled as soon as `inhibit-quit' is nil.
 To prevent this happening, set `quit-flag' to nil
 before making `inhibit-quit' nil.")
 
-  
+(defvar *waiting-for-input* nil
+  "T when we're waiting for .. input")
 
+(defvar *quit-flag* nil
+  "Set to T when the user hit the quit key")
+  
 
 (provide :lice-0.1/global)
