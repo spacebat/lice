@@ -30,16 +30,9 @@ This variable should never be set using `setq' or `setf'. Bind it with
   (declare (type pstring ps))
   (length (pstring-data ps)))
 
-(defclass buffer ()
+(defclass base-buffer ()
   ((file :type (or null pathname) :initarg :file :accessor buffer-file)
    (name :type string :initarg :name :accessor buffer-name)
-   (point :type marker :initarg :point :accessor buffer-point)
-   (mark :type marker :initarg :mark :accessor buffer-mark-marker)
-   ;; A string containing the raw buffer
-   (data :type (array character 1) :initarg :data :accessor buffer-data)
-   (intervals :type (or null interval) :initform nil :initarg :intervals :accessor intervals)
-   (gap-start :type integer :initarg :gap-start :accessor buffer-gap-start)
-   (gap-size :type integer :initarg :gap-size :accessor buffer-gap-size)
    ;; mode-line
    (mode-line :type list :initarg :mode-line :initform nil :accessor buffer-mode-line)
    (mode-line-string :type string :initform "" :accessor buffer-mode-line-string)
@@ -49,15 +42,26 @@ This variable should never be set using `setq' or `setf'. Bind it with
 	 "The buffer's tick counter. It is incremented for each change
 in text.")
    (display-count :type integer :initform 0 :accessor buffer-display-count :documentation
-	 "The buffer's display counter. It is incremented each time it
+		  "The buffer's display counter. It is incremented each time it
 is displayed in a window.")
    (display-time :type integer :initform 0 :accessor buffer-display-time :documentation
-	 "The last time the buffer was switched to in a window.")
+		 "The last time the buffer was switched to in a window.")
    (major-mode :type major-mode :initarg :major-mode :accessor buffer-major-mode)
-   (markers :type list :initform '() :accessor buffer-markers)
    (locals-variables :type hash-table :initform (make-hash-table) :accessor buffer-local-variables)
    (locals :type hash-table :initform (make-hash-table) :accessor buffer-locals))
   (:documentation "A Buffer."))
+
+(defclass buffer (base-buffer)
+  ((point :type marker :initarg :point :accessor buffer-point)
+   (mark :type marker :initarg :mark :accessor buffer-mark-marker)
+   ;; A string containing the raw buffer
+   (data :type (array character 1) :initarg :data :accessor buffer-data)
+   (intervals :type (or null interval) :initform nil :initarg :intervals :accessor intervals)
+   (gap-start :type integer :initarg :gap-start :accessor buffer-gap-start)
+   (gap-size :type integer :initarg :gap-size :accessor buffer-gap-size)
+   (markers :type list :initform '() :accessor buffer-markers)
+   (syntax-table :initform *standard-syntax-table* :accessor buffer-syntax-table))
+  (:documentation "A text Buffer."))
 
 (defmethod print-object ((obj buffer) stream)
   (print-unreadable-object (obj stream :type t :identity t)
@@ -272,6 +276,32 @@ buffer character."
   (declare (type buffer buf))
   (+ (buffer-gap-start buf) (buffer-gap-size buf)))
 
+(defmacro inc-aref (var buffer)
+  "increment VAR one character forward in BUFFER, avoiding the gap."
+  `(progn
+     (incf ,var)
+     (if (= (buffer-gap-start ,buffer) ,var)
+         (setf ,var (gap-end ,buffer)))))
+
+(defmacro inc-both (char-var aref-var buffer)
+  `(progn
+     (inc-aref ,aref-var ,buffer)
+     (incf ,char-var)))
+
+(defun aref-minus-1 (aref buffer)
+  (if (= (gap-end buffer) aref)
+      (1- (buffer-gap-start buffer))
+      (1- aref)))
+
+(defmacro dec-aref (var buffer)
+  "increment VAR one character forward in BUFFER, avoiding the gap."
+  `(setf ,var (aref-minus-1 ,var ,buffer)))
+
+(defmacro dec-both (char-var aref-var buffer)
+  `(progn
+     (dec-aref ,aref-var ,buffer)
+     (decf ,char-var)))
+
 ;; (defun gap-close (buf)
 ;;   "Move the gap to the end of the buffer."
 ;;   (let ((gap-start (buffer-gap-start buf))
@@ -326,10 +356,20 @@ buffer character."
   ;; TODO: handle buffer narrowing
   (buffer-min buf))
 
+(defun begv-aref (&optional (buf (current-buffer)))
+  "aref Position of beginning of accessible range of buffer."
+  ;; TODO: handle buffer narrowing
+  (buffer-char-to-aref buf (buffer-min buf)))
+
 (defun zv (&optional (buf (current-buffer)))
   "Position of end of accessible range of buffer."
   ;; TODO: handle buffer narrowing
   (buffer-max buf))
+
+(defun zv-aref (&optional (buf (current-buffer)))
+  "aref Position of end of accessible range of buffer."
+  ;; TODO: handle buffer narrowing
+  (buffer-char-to-aref buf (buffer-max buf)))
 
 (defun point (&optional (buffer (current-buffer)))
   "Return the point in the current buffer."
@@ -348,11 +388,22 @@ buffer character."
   "Return the maximum permissible value of point in the current buffer."
   (buffer-size buffer))
 
+(defun set-point-both (buffer char-pos aref-pos)
+  "Set point in BUFFER to CHARPOS, which corresponds to byte
+position BYTEPOS.  If the target position is
+before an intangible character, move to an ok place."
+  (declare (ignore aref-pos))
+  ;; TODO: implement
+  (setf (marker-position (buffer-point buffer)) char-pos))
+
+(defun set-point (char-pos &optional (buffer (current-buffer)))
+  (set-point-both buffer char-pos nil))
+
 (defun goto-char (position &optional (buffer (current-buffer)))
   "Set point to POSITION, a number."
   (when (and (>= position (point-min buffer))
 	     (<= position (point-max buffer)))
-    (setf (marker-position (buffer-point buffer)) position)))
+    (set-point position buffer)))
 
 ;; (defun buffer-char-before-point (buf p)
 ;;   "The character at the point P in buffer BUF. P is in char space."
@@ -405,6 +456,9 @@ buffer character."
 (defun buffer-point-aref (buf)
   "Return the buffer point in aref coordinates."
   (buffer-char-to-aref buf (point buf)))
+
+(defun buffer-fetch-char (aref buf)
+  (aref (buffer-data buf) aref))
 
 (defun string-to-vector (s)
   "Return a resizable vector containing the elements of the string s."

@@ -63,6 +63,38 @@ in this use of the minibuffer.")
   ;; empty init
   )
 
+(defvar *minibuffer-completion-table* nil
+  "Alist or obarray used for completion in the minibuffer.
+This becomes the ALIST argument to `try-completion' and `all-completions'.
+The value can also be a list of strings or a hash table.
+
+The value may alternatively be a function, which is given three arguments:
+  STRING, the current buffer contents;
+  PREDICATE, the predicate for filtering possible matches;
+  CODE, which says what kind of things to do.
+CODE can be nil, t or `lambda'.
+nil means to return the best completion of STRING, or nil if there is none.
+t means to return a list of all possible completions of STRING.
+`lambda' means to return t if STRING is a valid completion as it stands.")
+
+(defvar *minibuffer-history* nil
+  "Default minibuffer history list.
+This is used for all minibuffer input
+except when an alternate history list is specified.")
+
+(defvar *minibuffer-history-position* nil
+  "Current position of redoing in the history list.")
+
+(defvar *minibuffer-history-variable* '*minibuffer-history*
+  "History list symbol to add minibuffer values to.
+Each string of minibuffer input, as it appears on exit from the minibuffer,
+is added with
+**  (set minibuffer-history-variable
+**  (cons STRING (symbol-value minibuffer-history-variable)))")
+
+(defvar *minibuffer-completion-predicate* nil
+  "Within call to `completing-read', this holds the PREDICATE argument.")
+
 (defun make-minibuffer (major-mode)
   "Return a fresh minibuffer with major mode, MAJOR-MODE."
   ;; FIXME: Emacs prefixes it with a space so it doesn't show up in
@@ -368,38 +400,6 @@ and some related functions, which use zero-indexing for POSITION."
                    (decf (fill-pointer match))
                    (return)))
 	match))))
-  
-(defvar *minibuffer-completion-table* nil
-  "Alist or obarray used for completion in the minibuffer.
-This becomes the ALIST argument to `try-completion' and `all-completions'.
-The value can also be a list of strings or a hash table.
-
-The value may alternatively be a function, which is given three arguments:
-  STRING, the current buffer contents;
-  PREDICATE, the predicate for filtering possible matches;
-  CODE, which says what kind of things to do.
-CODE can be nil, t or `lambda'.
-nil means to return the best completion of STRING, or nil if there is none.
-t means to return a list of all possible completions of STRING.
-`lambda' means to return t if STRING is a valid completion as it stands.")
-
-(defvar *minibuffer-history* nil
-  "Default minibuffer history list.
-This is used for all minibuffer input
-except when an alternate history list is specified.")
-
-(defvar *minibuffer-history-position* nil
-  "Current position of redoing in the history list.")
-
-(defvar *minibuffer-history-variable* '*minibuffer-history*
-  "History list symbol to add minibuffer values to.
-Each string of minibuffer input, as it appears on exit from the minibuffer,
-is added with
-**  (set minibuffer-history-variable
-**  (cons STRING (symbol-value minibuffer-history-variable)))")
-
-(defvar *minibuffer-completion-predicate* nil
-  "Within call to `completing-read', this holds the PREDICATE argument.")
 
 (define-condition history-end (lice-condition)
   () (:documentation "raised when at the end of the history"))

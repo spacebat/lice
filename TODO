@@ -39,3 +39,10 @@ use ncurses getch.
 
 * *messages* buffer
 
+Path To Riches
+==============
+
+* allow windows to display line numbers in gutter
+
+* give buffers a side bar on the left and/or right ie for displaying irc name lists
+

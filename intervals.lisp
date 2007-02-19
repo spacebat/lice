@@ -354,8 +354,8 @@ of text."
 			    (interval-text-length interval))))
       (when (interval-right interval)
 	(setf i (interval-right i))
-	(loop while (interval-left i)
-	      do (setf i (interval-left i)))
+	(while (interval-left i)
+	  (setf i (interval-left i)))
 	(setf (interval-pt i) next-position)
 	(return-from next-interval i))
       (loop until (interval-past-top-p i)
@@ -371,8 +371,8 @@ of text."
     (let ((i interval))
       (when (interval-left interval)
 	(setf i (interval-left i))
-	(loop while (interval-right i)
-	      do (setf i (interval-right i)))
+	(while (interval-right i)
+          (setf i (interval-right i)))
 	(setf (interval-pt i) (- (interval-pt interval)
 				 (interval-text-length i)))
 	(return-from previous-interval i))
@@ -392,26 +392,25 @@ of text."
     (check-total-length i)
     (when (interval-right i)
       (setf successor (interval-right i))
-      (loop while (interval-left successor)
-	    do (progn
-		 (incf (interval-length successor) absorb)
-		 (check-total-length successor)
-		 (setf successor (interval-left successor))))
+      (while (interval-left successor)
+        (incf (interval-length successor) absorb)
+        (check-total-length successor)
+        (setf successor (interval-left successor)))
       (incf (interval-length successor) absorb)
       (check-total-length successor)
       (delete-interval i)
       (return-from merge-interval-right successor))
     (setf successor i)
-    (loop while (interval-parent successor)
-	  do (if (left-child-p successor)
-                 (progn
-                   (setf successor (interval-parent successor))
-                   (delete-interval i)
-                   (return-from merge-interval-right successor))
-               (progn
-                 (setf successor (interval-parent successor))
-                 (decf (interval-length successor) absorb)
-                 (check-total-length successor))))
+    (while (interval-parent successor)
+      (if (left-child-p successor)
+          (progn
+            (setf successor (interval-parent successor))
+            (delete-interval i)
+            (return-from merge-interval-right successor))
+          (progn
+            (setf successor (interval-parent successor))
+            (decf (interval-length successor) absorb)
+            (check-total-length successor))))
     (error "merge-interval-right: gak")))
 
 (defun merge-interval-left (i)
@@ -421,24 +420,24 @@ of text."
     (check-total-length i)
     (when (interval-left i)
       (setf predecessor (interval-left i))
-      (loop while (interval-right predecessor)
-	    do (incf (interval-length predecessor) absorb)
-	    (check-total-length predecessor)
-	    do (setf predecessor (interval-right predecessor)))
+      (while (interval-right predecessor)
+        (incf (interval-length predecessor) absorb)
+        (check-total-length predecessor)
+        (setf predecessor (interval-right predecessor)))
       (incf (interval-length predecessor) absorb)
       (check-total-length predecessor)
       (delete-interval i)
       (return-from merge-interval-left predecessor))
     (setf predecessor i)
-    (loop while (interval-parent predecessor)
-	  do (when (interval-right predecessor)
-	       (setf predecessor (interval-parent predecessor))
-	       (delete-interval i)
-	       (return-from merge-interval-left predecessor))
-	  do (setf predecessor (interval-parent predecessor))
-	  do (decf (interval-length predecessor) absorb)
-	  (check-total-length predecessor)
-	  )
+    (while (interval-parent predecessor)
+      (when (interval-right predecessor)
+        (setf predecessor (interval-parent predecessor))
+        (delete-interval i)
+        (return-from merge-interval-left predecessor))
+      (setf predecessor (interval-parent predecessor))
+      (decf (interval-length predecessor) absorb)
+      (check-total-length predecessor)
+      )
     (error "merge-interval-left: gak")))
 
 
@@ -634,14 +633,13 @@ buffer position, i.e. origin 1)."
      (t
       (when (> start (+ offset (total-length tree)))
 	(setf start (+ offset (total-length tree))))
-      (loop while (> left-to-delete 0) do 
-	    (progn
-	      (decf left-to-delete 
-		    (interval-deletion-adjustment tree (- start offset) left-to-delete))
-	      (setf tree (intervals buffer))
-	      (when (= left-to-delete (interval-length tree))
-		(setf (intervals buffer) nil)
-		(return))))))))
+      (while (> left-to-delete 0)  
+        (decf left-to-delete 
+              (interval-deletion-adjustment tree (- start offset) left-to-delete))
+        (setf tree (intervals buffer))
+        (when (= left-to-delete (interval-length tree))
+          (setf (intervals buffer) nil)
+          (return)))))))
 	  
 (defun interval-start-pos (source)
   (if (or (null source)
@@ -735,30 +733,30 @@ text..."
 	  (setf (interval-pt under) position))
       (setf prev (previous-interval under)))
     (setf over-used 0)
-    (loop while over do 
-	  (if (< (- (interval-text-length over) over-used)
-		 (interval-text-length under))
-	      (progn
-		(setf this (split-interval-left under (- (interval-text-length over)
-							 over-used)))
-		(copy-properties under this))
-	    (setf this under))
-;;       /* THIS is now the interval to copy or merge into.
-;; 	 OVER covers all of it.  */
-	  (if inherit
-	      (merge-properties over this)
-	    (copy-properties over this))
-;;       /* If THIS and OVER end at the same place,
-;; 	 advance OVER to a new source interval.  */
-	  (if (= (interval-text-length this) 
-		(- (interval-text-length over) over-used))
-	      (progn
-		(setf over (next-interval over)
-		      over-used 0))
-;; 	/* Otherwise just record that more of OVER has been used.  */
-	    (incf over-used (interval-text-length this)))
-;;       /* Always advance to a new target interval.  */
-	  (setf under (next-interval this)))
+    (while over
+      (if (< (- (interval-text-length over) over-used)
+             (interval-text-length under))
+          (progn
+            (setf this (split-interval-left under (- (interval-text-length over)
+                                                     over-used)))
+            (copy-properties under this))
+          (setf this under))
+      ;;       /* THIS is now the interval to copy or merge into.
+      ;; 	 OVER covers all of it.  */
+      (if inherit
+          (merge-properties over this)
+          (copy-properties over this))
+      ;;       /* If THIS and OVER end at the same place,
+      ;; 	 advance OVER to a new source interval.  */
+      (if (= (interval-text-length this) 
+             (- (interval-text-length over) over-used))
+          (progn
+            (setf over (next-interval over)
+                  over-used 0))
+          ;; 	/* Otherwise just record that more of OVER has been used.  */
+          (incf over-used (interval-text-length this)))
+      ;;       /* Always advance to a new target interval.  */
+      (setf under (next-interval this)))
     (when (intervals buffer)
       (setf (intervals buffer) (balance-an-interval (intervals buffer))))))
 
@@ -793,9 +791,9 @@ text..."
   (let ((migrate (interval-left i))
 	(this (interval-right i))
 	(migrate-amt (interval-length (interval-left i))))
-    (loop while (interval-left this)
-	  do (setf this (interval-left this))
-	  do (incf (interval-length this) migrate-amt))
+    (while (interval-left this)
+      (setf this (interval-left this))
+      (incf (interval-length this) migrate-amt))
     (check-total-length this)
     (setf (interval-left this) migrate)
     (setf (interval-parent migrate) this)

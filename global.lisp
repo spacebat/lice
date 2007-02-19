@@ -59,4 +59,28 @@
   because it doesn't have read-from-string."
   (muerte::simple-read-from-string string))
 
+;;; Lisp function we like to have
+
+(defun concat (&rest strings)
+  "Concatenate all the arguments and make the result a string.
+The result is a string whose elements are the elements of all the arguments.
+Each argument must be a string."
+  (apply 'concatenate 'string strings))
+
+(defmacro while (test &body body)
+  "If TEST yields non-nil, eval BODY... and repeat.
+The order of execution is thus TEST, BODY, TEST, BODY and so on
+until TEST returns nil."
+  (if body
+      `(loop while ,test do ,@body)
+      `(loop while ,test)))
+
+(defmacro check-number-coerce-marker (marker-var)
+  "Verify that MARKER-VAR is a number or if it's a marker then
+set the var to the marker's position."
+  `(progn
+     (check-type ,marker-var (or number marker))
+     (when (typep ,marker-var 'marker)
+       (setf ,marker-var (marker-position ,marker-var)))))
+
 (provide :lice-0.1/global)

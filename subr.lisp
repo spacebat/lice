@@ -82,6 +82,8 @@ saving keyboard macros ***(see `insert-kbd-macro')."
   (loop for p in prompts
 	collect (read-from-minibuffer p)))
 
+(defvar *extended-command-history* nil)
+
 (defun read-command (prompt)
   "Read the name of a command and return as a symbol.
 Prompt with prompt.  By default, return default-value."
@@ -92,7 +94,8 @@ Prompt with prompt.  By default, return default-value."
 	     *commands*)
     (dformat +debug-v+ "commands: ~s~%" cmds)
     ;; Sadly, a cheap hack
-    (find (completing-read prompt cmds) cmds :test #'string-equal :key #'symbol-name)))
+    (find (completing-read prompt cmds :history '*extended-command-history*)
+          cmds :test #'string-equal :key #'symbol-name)))
 
 (defun read-buffer (prompt &optional def require-match)
   "Read the name of a buffer and return as a string.
@@ -199,5 +202,56 @@ See `walk-windows' for the meaning of MINIBUF and FRAME."
 		(push window windows)))
 	  (frame-window-list frame minibuf))
     windows))
+
+;; FIXME: this isn't complete.
+(defmacro defalias (from-symbol to-symbol)
+"Set symbol's function definition to definition, and return definition."
+  `(define-symbol-macro ,from-symbol ,to-symbol))
+
+(defun intern-soft (name &optional (package *package*))
+  (find-symbol name package))
+
+;;;; Syntax tables
+
+(defmacro with-syntax-table (table &body body)
+  "Evaluate BODY with syntax table of current buffer set to TABLE.
+The syntax table of the current buffer is saved, BODY is evaluated, and the
+saved table is restored, even in case of an abnormal exit.
+Value is what BODY returns."
+  (declare (debug t))
+  (let ((old-table (make-symbol "table"))
+	(old-buffer (make-symbol "buffer")))
+    `(let ((,old-table (syntax-table))
+	   (,old-buffer (current-buffer)))
+       (unwind-protect
+	   (progn
+	     (set-syntax-table ,table)
+	     ,@body)
+	 (save-current-buffer
+	   (set-buffer ,old-buffer)
+	   (set-syntax-table ,old-table))))))
+
+(defun make-syntax-table (&optional oldtable)
+  "Return a new syntax table.
+Create a syntax table which inherits from OLDTABLE (if non-nil) or
+from `standard-syntax-table' otherwise."
+  (let ((table (make-char-table 'syntax-table nil)))
+    (set-char-table-parent table (or oldtable (standard-syntax-table)))
+    table))
+
+(defun syntax-after (pos)
+  "Return the raw syntax of the char after POS.
+If POS is outside the buffer's accessible portion, return nil."
+  (unless (or (< pos (point-min)) (>= pos (point-max)))
+    (let ((st (if parse-sexp-lookup-properties
+		  (get-char-property pos 'syntax-table))))
+      (if (consp st) st
+	(aref (or st (syntax-table)) (char-after pos))))))
+
+(defun syntax-class (syntax)
+  "Return the syntax class part of the syntax descriptor SYNTAX.
+If SYNTAX is nil, return nil."
+  (and syntax (logand (car syntax) 65535)))
+
 
 (provide :lice-0.1/subr)

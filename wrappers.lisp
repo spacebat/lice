@@ -60,6 +60,32 @@
   #+sbcl (sb-ext:process-alive-p process)
   #-sbcl (error "Not implemented"))
 
+(defun internal-process-kill (process &optional (signal 3))
+  #+sbcl (sb-ext:process-kill process signal)
+  #-(or sbcl) (error "Not implemented"))
+
+;;; threads
+
+(defun make-thread (function)
+  #+sbcl (sb-thread:make-thread function)
+  #-(or sbcl) (error "Not implemented"))
+
+(defun thread-alive-p (thread)
+  #+sbcl (sb-thread:thread-alive-p thread)
+  #-(or sbcl) (error "Not implemented"))
+
+(defun kill-thread (thread)
+  #+sbcl (sb-thread:terminate-thread thread)
+  #-(or sbcl) (error "Not implemented"))
+
+(defun make-mutex ()
+  #+sbcl (sb-thread:make-mutex)
+  #-(or sbcl) (error "Not implemented"))
+
+(defmacro with-mutex ((mutex) &body body)
+  #+sbcl `(sb-thread:with-mutex (,mutex) ,@body)
+  #-(or sbcl) (error "Not implemented"))
+
 ;;; environment
 
 (defun getenv (var)
@@ -77,12 +103,8 @@
     #-(or sbcl)
     (error "Not implemented")))
 
-;;; threads
+;;; two way streams 
 
-(defun make-thread (function)
-  #+sbcl (sb-thread:make-thread function)
-  #-(or sbcl)
-  (error "Not implemented"))
 
 (provide :lice-0.1/wrappers)
 

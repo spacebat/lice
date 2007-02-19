@@ -105,27 +105,26 @@
       (setf prev-changed i)
       (decf len (interval-text-length i))
       (setf i (next-interval i)))
-    (loop while (> len 0)
-	  do (progn
-	       (when (null i)
-		 (error "borked."))
-	       (when (>= (interval-text-length i) len)
-		 (when (> (interval-text-length i) len)
-		   (setf i (split-interval-left i len)))
-		 (set-properties properties i buffer)
-		 (when prev-changed
-		   (merge-interval-left i))
-		 (return-from set-text-properties-1))
-	       (decf len (interval-text-length i))
-	       ;; We have to call set_properties even if we are going
-	       ;; to merge the intervals, so as to make the undo
-	       ;; records and cause redisplay to happen.
-	       (set-properties properties i buffer)
-	       (if (null prev-changed)
-		   (setf prev-changed i)
-		 (setf prev-changed (merge-interval-left i)
-		       i prev-changed))
-	       (setf i (next-interval i))))))
+    (while (> len 0)
+      (when (null i)
+        (error "borked."))
+      (when (>= (interval-text-length i) len)
+        (when (> (interval-text-length i) len)
+          (setf i (split-interval-left i len)))
+        (set-properties properties i buffer)
+        (when prev-changed
+          (merge-interval-left i))
+        (return-from set-text-properties-1))
+      (decf len (interval-text-length i))
+      ;; We have to call set_properties even if we are going
+      ;; to merge the intervals, so as to make the undo
+      ;; records and cause redisplay to happen.
+      (set-properties properties i buffer)
+      (if (null prev-changed)
+          (setf prev-changed i)
+          (setf prev-changed (merge-interval-left i)
+                i prev-changed))
+      (setf i (next-interval i)))))
 
 (defun copy-properties (source target)
   (when (and (default-interval-p source)
@@ -338,7 +337,7 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT.  */"
       (unless (= position (+ (interval-text-length i) (interval-pt i)))
 	(interval-plist i)))))
     
-(defun get-text-property (position prop object)
+(defun get-text-property (position prop &optional (object (current-buffer)))
   (getf (text-properties-at position object) prop))
 
 (defun get-char-property-and-overlay (position prop object overlay)
@@ -396,12 +395,12 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT."
     (when (null i)
       (return-from next-property-change limit))
     (setf next (next-interval i))
-    (loop while (and next
-		     (intervals-equal i next)
-		     (or (null limit)
-			 (< (interval-pt next)
-			    limit)))
-	  do (setf next (next-interval next)))
+    (while (and next
+                (intervals-equal i next)
+                (or (null limit)
+                    (< (interval-pt next)
+                       limit)))
+      (setf next (next-interval next)))
     (when (null next)
       (return-from next-property-change limit))
     (when (null limit)
@@ -446,11 +445,11 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT."
 	  next (next-interval i))
     ;; walk the intervals til we find one with a different plist val
     ;; for prop.
-    (loop while (and next
-		     (eql here-val (getf (interval-plist next) prop))
-		     (or (null limit)
-			 (< (interval-pt next) limit)))
-	  do (setf next (next-interval next)))
+    (while (and next
+                (eql here-val (getf (interval-plist next) prop))
+                (or (null limit)
+                    (< (interval-pt next) limit)))
+      (setf next (next-interval next)))
     ;; FIXME: this code should be cleaned.
     (when (null next)
       (return-from next-single-property-change limit))
@@ -471,12 +470,12 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT."
       (return-from previous-single-property-change limit))
     (setf here-val (getf (interval-plist i) prop)
 	  previous (previous-interval i))
-    (loop while (and previous
-		     (eql here-val (getf (interval-plist previous) prop))
-		     (or (null limit)
-			 (> (+ (interval-pt previous) (interval-text-length previous))
-			    limit)))
-	  do (setf previous (previous-interval previous)))
+    (while (and previous
+                (eql here-val (getf (interval-plist previous) prop))
+                (or (null limit)
+                    (> (+ (interval-pt previous) (interval-text-length previous))
+                       limit)))
+      (setf previous (previous-interval previous)))
     ;; FIXME: this code should be cleaned.
     (when (null previous)
       (return-from previous-single-property-change limit))
@@ -507,13 +506,13 @@ back past position LIMIT; return LIMIT if nothing is found until LIMIT."
     (when (= (interval-pt i) position)
       (setf i (previous-interval i)))
     (setf previous (previous-interval i))
-    (loop while (and previous
-		     (intervals-equal previous i)
-		     (or (null limit)
-			 (> (+ (interval-pt previous)
-			       (interval-text-length previous))
-			    limit)))
-	  do (setf previous (previous-interval previous)))
+    (while (and previous
+                (intervals-equal previous i)
+                (or (null limit)
+                    (> (+ (interval-pt previous)
+                          (interval-text-length previous))
+                       limit)))
+      (setf previous (previous-interval previous)))
     ;; FIXME: this code needs cleaning
     (when (null previous)
       (return-from previous-property-change limit))

@@ -108,11 +108,6 @@ With positive n, a non-empty line at the end counts as one line
 	      (signal 'beginning-of-buffer))	
     (+ n lines)))))
 
-(defun current-column ()
-  "Return the current column that the current buffer's point is on."
-  (let ((bol (buffer-beginning-of-line)))
-    (- (point) bol)))
-
 (defcommand self-insert-command ((arg)
 				 :prefix)
   "Insert the character you type.
@@ -276,6 +271,22 @@ with SIGHUP."
   (set-marker (mark-marker) (point))
   (message "Mark set"))
 
+(defun push-mark (&optional location nomsg activate)
+  "Set mark at LOCATION (point, by default) and push old mark on mark ring.
+If the last global mark pushed was not in the current buffer,
+also push LOCATION on the global mark ring.
+Display `Mark set' unless the optional second arg NOMSG is non-nil.
+In Transient Mark mode, activate mark if optional third arg ACTIVATE non-nil.
+
+Novice Emacs Lisp programmers often try to use the mark for the wrong
+purposes.  See the documentation of `set-mark' for more information.
+
+In Transient Mark mode, this does not activate the mark."
+  ;; TODO implement
+  (set-marker (mark-marker) (point))
+  (unless nomsg
+    (message "Mark set")))
+
 ;; (defun kill-ring-save (beg end)
 ;;   "Save the region to the kill ring."
 
@@ -297,6 +308,22 @@ If the buffer is narrowed, this command uses the beginning and size
 of the accessible part of the buffer."
   (set-mark-command)
   (goto-char (point-max)))
+
+(defcommand just-one-space ((&optional (n 1))
+                            :prefix)
+  "Delete all spaces and tabs around point, leaving one space (or N spaces)."
+  (let ((orig-pos (point)))
+    (skip-chars-backward (coerce '(#\Space #\Tab) 'string))
+    (constrain-to-field nil orig-pos)
+    (dotimes (i n)
+      (if (char= (following-char) #\Space)
+	  (forward-char 1)
+          (insert #\Space)))
+    (delete-region
+     (point)
+     (progn
+       (skip-chars-forward (coerce '(#\Space #\Tab) 'string))
+       (constrain-to-field nil orig-pos t)))))
 
 (defcommand beginning-of-buffer ()
   "Move point to the beginning of the buffer; leave mark at previous position.

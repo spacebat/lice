@@ -197,6 +197,95 @@ is after LIMIT, then LIMIT will be returned instead."
     (declare (ignore beg))
     end))
 
+(defvar *inhibit-field-text-motion* nil
+  "Non-nil means text motion commands don't notice fields.")
+
+(defun constrain-to-field (new-pos old-pos &optional escape-from-edge only-in-line inhibit-capture-property)
+  "Return the position closest to NEW-POS that is in the same field as OLD-POS.
+
+A field is a region of text with the same `field' property.
+If NEW-POS is nil, then the current point is used instead, and set to the
+constrained position if that is different.
+
+If OLD-POS is at the boundary of two fields, then the allowable
+positions for NEW-POS depends on the value of the optional argument
+ESCAPE-FROM-EDGE: If ESCAPE-FROM-EDGE is nil, then NEW-POS is
+constrained to the field that has the same `field' char-property
+as any new characters inserted at OLD-POS, whereas if ESCAPE-FROM-EDGE
+is non-nil, NEW-POS is constrained to the union of the two adjacent
+fields.  Additionally, if two fields are separated by another field with
+the special value `boundary', then any point within this special field is
+also considered to be `on the boundary'.
+
+If the optional argument ONLY-IN-LINE is non-nil and constraining
+NEW-POS would move it to a different line, NEW-POS is returned
+unconstrained.  This useful for commands that move by line, like
+\\[next-line] or \\[beginning-of-line], which should generally respect field boundaries
+only in the case where they can still move to the right line.
+
+If the optional argument INHIBIT-CAPTURE-PROPERTY is non-nil, and OLD-POS has
+a non-nil property of that name, then any field boundaries are ignored.
+
+Field boundaries are not noticed if `inhibit-field-text-motion' is non-nil."
+  (let ((orig-point 0)
+        fwd prev-old prev-new)
+    (unless new-pos 
+      ;; Use the current point, and afterwards, set it.
+      (setf new-pos (point)
+            orig-point new-pos))
+    (check-type new-pos number)
+    (check-type old-pos number)
+    (setf fwd (> new-pos old-pos)
+          prev-old (1- old-pos)
+          prev-new (1- new-pos))
+    (when (and (null *inhibit-field-text-motion*)
+               (/= new-pos old-pos)
+               (or (get-char-property new-pos 'field)
+                   (get-char-property old-pos 'field)
+                   ;; To recognize field boundaries, we must also look at the
+                   ;; previous positions; we could use `get_pos_property'
+                   ;; instead, but in itself that would fail inside non-sticky
+                   ;; fields (like comint prompts).
+                   (and (> new-pos (begv))
+                        (get-char-property prev-new 'field))
+                   (and (> old-pos (begv))
+                        (get-char-property prev-old 'field)))
+               (or (null inhibit-capture-property)
+                   (and (null (get-pos-property old-pos inhibit-capture-property nil))
+                        (or (<= old-pos (begv))
+                            (null (get-char-property old-pos inhibit-capture-property))
+                            (null (get-char-property prev-old inhibit-capture-property))))))
+      ;; It is possible that NEW_POS is not within the same field as
+      ;; OLD_POS; try to move NEW_POS so that it is.
+      (let ((field-bound (if fwd
+                             (field-end old-pos escape-from-edge new-pos)
+                             (field-beginning old-pos escape-from-edge new-pos))))
+        (when (and
+               ;; See if ESCAPE_FROM_EDGE caused FIELD_BOUND to jump to the
+               ;; other side of NEW_POS, which would mean that NEW_POS is
+               ;; already acceptable, and it's not necessary to constrain it
+               ;; to FIELD_BOUND.
+               (if (< field-bound new-pos) fwd (not fwd))
+               ;; NEW_POS should be constrained, but only if either
+               ;; ONLY_IN_LINE is nil (in which case any constraint is OK),
+               ;; or NEW_POS and FIELD_BOUND are on the same line (in which
+               ;; case the constraint is OK even if ONLY_IN_LINE is non-nil). */
+               (or (null only-in-line)
+                   ;; This is the ONLY_IN_LINE case, check that NEW_POS and
+                   ;; FIELD_BOUND are on the same line by seeing whether
+                   ;; there's an intervening newline or not.
+                   (progn
+                     (multiple-value-bind (p nfound)
+                         (buffer-scan-newline new-pos field-bound (if fwd -1 1))
+                       (declare (ignore p))
+                       (zerop nfound)))))
+          ;; Constrain NEW_POS to FIELD_BOUND.
+          (setf new-pos field-bound))
+        (when (and orig-point
+                   (/= new-pos orig-point))
+          (set-point new-pos))))
+    new-pos))
+                 
 (defun npropertize (string &rest props)
   "Same as propertize but don't make a copy of STRING."
   (declare (type string string))
@@ -271,6 +360,14 @@ At the beginning of the buffer or accessible region, return #\Nul."
   (or (char-before (point))
       #\Nul))
 
+(defun following-char ()
+  "Return the character following point, as a number.
+At the end of the buffer or accessible region, return #\Nul."
+  (if (>= (point) (zv))
+      #\Nul ; XXX return nil?
+      (buffer-fetch-char (buffer-char-to-aref (current-buffer) (point))
+                         (current-buffer))))
+
 (defun bolp ()
   "Return t if point is at the beginning of a line."
   (or (= (point) (point-min))
@@ -290,5 +387,17 @@ At the beginning of the buffer or accessible region, return #\Nul."
     (prog1
 	(make-buffer-string start end t)
       (delete-region start end))))
+
+(defun insert-char (character count &optional inherit)
+  "Insert COUNT copies of CHARACTER.
+Point, and before-insertion markers, are relocated as in the function `insert'.
+**The optional third arg INHERIT, if non-nil, says to inherit text properties
+**from adjoining text, if those properties are sticky."
+  (declare (ignore inherit))
+  (check-type character character)
+  (check-type count number)
+  (unless (< count 0)
+    (dotimes (i count)
+      (insert character))))
 
 (provide :lice-0.1/editfns)

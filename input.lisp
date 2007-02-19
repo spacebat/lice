@@ -405,6 +405,7 @@ more."
     (define-key kmap (make-instance 'key :char #\Space :control t) 'set-mark-command)
     (define-key kmap (make-instance 'key :char #\` :control t) 'set-mark-command)
     (define-key kmap (make-instance 'key :char #\! :meta t) 'shell-command)
+    (define-key kmap (make-instance 'key :char #\Space :meta t) 'just-one-space)
     (define-key kmap (make-instance 'key :char #\x :control t) ctl-x-prefix)
     (define-key kmap (make-instance 'key :char #\c :control t) ctl-c-prefix)
     (define-key kmap (make-instance 'key :char #\h :control t) ctl-h-prefix)
