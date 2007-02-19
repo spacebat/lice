@@ -103,6 +103,51 @@
     #-(or sbcl)
     (error "Not implemented")))
 
+;;; terminal manipulation
+
+;;; SIGINT error. we setup our own error handler.
+
+(define-condition user-break (simple-condition)
+  ())
+
+#+sbcl
+(defun sbcl-sigint-handler (&rest junk)
+  (declare (ignore junk))
+  (flet ((break-it ()
+           (with-simple-restart (continue "continue from break")
+             (invoke-debugger (make-condition 'user-break
+                                              :format-control "User break")))))
+    (sb-thread:interrupt-thread (sb-thread::foreground-thread) #'break-it)))
+
+(defun enable-sigint-handler ()
+  #+sbcl (sb-unix::enable-interrupt sb-unix::sigint #'sbcl-sigint-handler)
+
+  #-(or sbcl) (error "not implemented"))
+
+(defvar *old-term-settings* nil)
+
+(defun term-backup-settings ()
+  #+sbcl
+  (setf *old-term-settings* (sb-posix:tcgetattr 0))
+
+  #-(or sbcl) (error "not implemented"))
+
+(defun term-restore-settings ()
+  #+sbcl
+  (sb-posix:tcsetattr 0 0 *old-term-settings*)
+
+  #-(or sbcl) (error "not implemented"))
+
+(defun term-set-quit-char (code)
+  #+sbcl
+  (let ((attr (sb-posix:tcgetattr 0))
+        ;; according to termios.h VINTR is 8
+        (vintr 8))
+    (setf (aref (sb-posix:termios-cc attr) vintr) code)
+    (sb-posix:tcsetattr 0 0 attr))
+
+  #-(or sbcl) (error "not implemented"))
+
 ;;; two way streams 
 
 

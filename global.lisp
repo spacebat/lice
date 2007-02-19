@@ -88,4 +88,18 @@ set the var to the marker's position."
   (when (consp object)
     (cdr object)))
 
+(defvar *quit-code* 7
+  "The terminal char code for the interrupt key.")
+
+(defvar *inhibit-quit* nil
+  ;; XXX: this is not correct docs
+  "Non-nil inhibits C-g quitting from happening immediately.
+Note that `quit-flag' will still be set by typing C-g,
+so a quit will be signaled as soon as `inhibit-quit' is nil.
+To prevent this happening, set `quit-flag' to nil
+before making `inhibit-quit' nil.")
+
+  
+
+
 (provide :lice-0.1/global)

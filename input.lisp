@@ -278,21 +278,25 @@ recognize the default bindings, just as `read-key-sequence' does."
 (defconstant +key-escape+ 27)
 
 (defun wait-for-event ()
-  (loop
-     for event = (frame-read-event (selected-frame))
-     for procs = (poll-processes) do
-     (cond (event
-	    (return event))
-	   ;; handle subprocesses
-	   (procs
-	    (dispatch-processes procs)
-	    (frame-render (selected-frame))))
-     ;; FIXME: Yes, I'd love to be able to sleep until there was
-     ;; activity on one of the streams lice is waiting for input on
-     ;; but i don't know how to do that. So just sleep for a tiny
-     ;; bit to pass control over to the operating system and then
-     ;; check again.
-     (sleep 0.01)))
+  ;; don't let the user C-g when reading for input
+  (let ((*inhibit-quit* t))
+    (loop
+       for event = (frame-read-event (selected-frame))
+       for procs = (poll-processes) do
+       (cond (event
+              (return event))
+             ;; handle subprocesses
+             (procs
+              ;; let the user break out of this stuff
+              (let ((*inhibit-quit* nil))
+                (dispatch-processes procs)
+                (frame-render (selected-frame)))))
+       ;; FIXME: Yes, I'd love to be able to sleep until there was
+       ;; activity on one of the streams lice is waiting for input on
+       ;; but i don't know how to do that. So just sleep for a tiny
+       ;; bit to pass control over to the operating system and then
+       ;; check again.
+       (sleep 0.01))))
 
 ;; This is really TTY specific
 (defun next-event ()
