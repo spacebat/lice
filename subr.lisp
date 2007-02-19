@@ -162,10 +162,9 @@ Fourth arg default-value is the default value.  If non-nil, it is used
   "Return the start or end position of the region.
 BEGINNINGP non-zero means return the start.
 If there is no region active, signal an error."
-  (if (and (< (point) (mark))
-	   beginningp)
-      (point)
-    (mark)))
+  (if beginningp
+      (min (point) (mark))
+      (max (point) (mark))))
 
 (defun region-beginning ()
   "Return position of beginning of region, as an integer."
@@ -211,47 +210,32 @@ See `walk-windows' for the meaning of MINIBUF and FRAME."
 (defun intern-soft (name &optional (package *package*))
   (find-symbol name package))
 
-;;;; Syntax tables
+(defcommand eval-region ((start end &optional print-flag (read-function 'read-from-string))
+                         :region-beginning :region-end)
+  "Execute the region as Lisp code.
+When called from programs, expects two arguments,
+giving starting and ending indices in the current buffer
+of the text to be executed.
+Programs can pass third argument PRINTFLAG which controls output:
+A value of nil means discard it; anything else is stream for printing it.
+Also the fourth argument READ-FUNCTION, if non-nil, is used
+instead of `read' to read each expression.  It gets one argument
+which is the input stream for reading characters.
 
-(defmacro with-syntax-table (table &body body)
-  "Evaluate BODY with syntax table of current buffer set to TABLE.
-The syntax table of the current buffer is saved, BODY is evaluated, and the
-saved table is restored, even in case of an abnormal exit.
-Value is what BODY returns."
-  (declare (debug t))
-  (let ((old-table (make-symbol "table"))
-	(old-buffer (make-symbol "buffer")))
-    `(let ((,old-table (syntax-table))
-	   (,old-buffer (current-buffer)))
-       (unwind-protect
-	   (progn
-	     (set-syntax-table ,table)
-	     ,@body)
-	 (save-current-buffer
-	   (set-buffer ,old-buffer)
-	   (set-syntax-table ,old-table))))))
-
-(defun make-syntax-table (&optional oldtable)
-  "Return a new syntax table.
-Create a syntax table which inherits from OLDTABLE (if non-nil) or
-from `standard-syntax-table' otherwise."
-  (let ((table (make-char-table 'syntax-table nil)))
-    (set-char-table-parent table (or oldtable (standard-syntax-table)))
-    table))
-
-(defun syntax-after (pos)
-  "Return the raw syntax of the char after POS.
-If POS is outside the buffer's accessible portion, return nil."
-  (unless (or (< pos (point-min)) (>= pos (point-max)))
-    (let ((st (if parse-sexp-lookup-properties
-		  (get-char-property pos 'syntax-table))))
-      (if (consp st) st
-	(aref (or st (syntax-table)) (char-after pos))))))
-
-(defun syntax-class (syntax)
-  "Return the syntax class part of the syntax descriptor SYNTAX.
-If SYNTAX is nil, return nil."
-  (and syntax (logand (car syntax) 65535)))
-
+This function does not move point."
+  (let* ((stdout (make-string-output-stream))
+         (*standard-output* stdout)
+         (*standard-error* stdout)
+         (*debug-io* stdout)
+         (string (buffer-substring-no-properties start end))
+         (pos 0)
+         last obj)
+    (loop
+       (setf last obj)
+       (multiple-value-setq (obj pos) (funcall read-function string nil string :start pos))
+       (when (eq obj string)
+         (cond ((eq print-flag t)
+                (message "~s" last)))
+         (return-from eval-region last)))))
 
 (provide :lice-0.1/subr)

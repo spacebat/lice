@@ -83,4 +83,9 @@ set the var to the marker's position."
      (when (typep ,marker-var 'marker)
        (setf ,marker-var (marker-position ,marker-var)))))
 
+(defun cdr-safe (object)
+  "Return the cdr of OBJECT if it is a cons cell, or else nil."
+  (when (consp object)
+    (cdr object)))
+
 (provide :lice-0.1/global)

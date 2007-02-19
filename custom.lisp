@@ -11,3 +11,7 @@
 ;; FIXME: empty
 (defmacro defface (name colors docstring group)
   )
+
+;; FIXME: this is incomplete
+(defmacro defcustom-buffer-local (symbol value doc &rest args)
+  `(define-buffer-local ,symbol ,value ,doc))

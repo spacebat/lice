@@ -134,6 +134,25 @@ exist, return nil."
 	  (when b
 	    (buffer-local-binding-value v))))))
 
+(define-buffer-local :buffer-invisibility-spec nil
+  "Invisibility spec of this buffer.
+The default is t, which means that text is invisible
+if it has a non-nil `invisible' property.
+If the value is a list, a text character is invisible if its `invisible'
+property is an element in that list.
+If an element is a cons cell of the form (PROP . ELLIPSIS),
+then characters with property value PROP are invisible,
+and they have an ellipsis as well if ELLIPSIS is non-nil.")
+
+(define-buffer-local :selective-display nil
+  "Non-nil enables selective display.
+An Integer N as value means display only lines
+that start with less than n columns of space.
+A value of t means that the character ^M makes itself and
+all the rest of the line invisible; also, when saving the buffer
+in a file, save the ^M as a newline.")
+
+
 
 ;;; buffer related conditions
 
@@ -151,9 +170,28 @@ exist, return nil."
   (print-unreadable-object (obj stream :type t :identity t)
     (format stream "~a" (marker-position obj))))
 
-(defun copy-marker (marker)
-  "Return a new marker with the same point and buffer as MARKER."
-  (make-marker (marker-position marker) (marker-buffer marker)))
+(defgeneric ensure-number (thing)
+  (:documentation "Call this function when THING could be a number or a marker or...?"))
+
+(defmethod ensure-number ((thing number))
+  thing)
+
+(defmethod ensure-number ((thing marker))
+  (marker-position thing))
+
+(defun copy-marker (marker &optional type)
+  "Return a new marker pointing at the same place as MARKER.
+If argument is a number, makes a new marker pointing
+at that position in the current buffer.
+**The optional argument TYPE specifies the insertion type of the new marker;
+**see `marker-insertion-type'."
+  (declare (ignore type))
+  (make-marker (if (numberp marker)
+                   marker
+                   (marker-position marker))
+               (if (typep marker 'marker)
+                   (marker-buffer marker)
+                   (current-buffer))))
 
 (defun make-marker (&optional position buffer)
   "Return a newly allocated marker which does not point anywhere."
@@ -162,21 +200,30 @@ exist, return nil."
       (set-marker m position buffer))
     m))
 
-(defun set-marker (marker position &optional (buffer (current-buffer)))
-  ;; TODO: make sure the position is within bounds
-  (setf (marker-position marker) position)
-  ;; remove the marker from its buffer, when appropriate
-  (when (and (marker-buffer marker)
-	     (or (null buffer)
-		 (not (eq (marker-buffer marker) buffer))))
+(defun unchain-marker (marker)
+  (when (marker-buffer marker)
     (setf (buffer-markers (marker-buffer marker))
-	    (delete marker (buffer-markers (marker-buffer marker)) :key #'weak-pointer-value)))
-  ;; Update marker's buffer
-  (setf (marker-buffer marker) buffer)
-  ;; Put the marker in the new buffer's list (wrapped in a
-  ;; weak-pointer), when appropriate.
-  (when buffer
-    (push (make-weak-pointer marker) (buffer-markers buffer))))
+          (delete marker (buffer-markers (marker-buffer marker)) :key #'weak-pointer-value))))
+
+(defun chain-marker (marker buffer)
+  (push (make-weak-pointer marker) (buffer-markers buffer)))  
+
+(defun set-marker (marker position &optional (buffer (current-buffer)))
+  ;; remove the marker from its buffer, when appropriate
+  (when (null position)
+    (unchain-marker marker)
+    (return-from set-marker marker))
+  ;; XXX handle dead buffers
+
+  ;; normalize pos
+  (setf (marker-position marker) (min (max position (begv buffer)) (zv buffer)))
+
+  ;; update buffer stuff
+  (unless (eq (marker-buffer marker) buffer)
+    (unchain-marker marker)
+    (setf (marker-buffer marker) buffer)
+    (chain-marker marker buffer))
+  marker)
 
 (defun update-markers-del (buffer start size)
   ;; First get rid of stale markers
@@ -401,6 +448,7 @@ before an intangible character, move to an ok place."
 
 (defun goto-char (position &optional (buffer (current-buffer)))
   "Set point to POSITION, a number."
+  (check-number-coerce-marker position)
   (when (and (>= position (point-min buffer))
 	     (<= position (point-max buffer)))
     (set-point position buffer)))
@@ -591,8 +639,8 @@ number of newlines found. START and LIMIT are inclusive."
 	     (let* ((start-aref (buffer-char-to-aref buf start))
 		    (limit-aref (buffer-char-to-aref buf limit))
 		    (ceiling (if (>= start-aref (gap-end buf))
-				 (gap-end buf)
-			       limit-aref))
+				 (max limit-aref (gap-end buf))
+                                 limit-aref))
 		    (i 0)
 		    ;; :END is not inclusive but START is.
 		    (start (1+ start-aref))
@@ -624,8 +672,8 @@ number of newlines found. START and LIMIT are inclusive."
 	     (let* ((start-aref (buffer-char-to-aref buf start))
 		    (limit-aref (1+ (buffer-char-to-aref buf limit)))
 		    (ceiling (if (< start (buffer-gap-start buf))
-				 (buffer-gap-start buf)
-			       limit-aref))
+				 (min limit-aref (buffer-gap-start buf))
+                                 limit-aref))
 		    (i 0)
 		    (start start-aref)
 		    p)
@@ -991,5 +1039,18 @@ Return variable."
 		       (symbol-value k) (local-variable-binding-value v))
 		 (remhash k (buffer-local-variables buffer)))))
     (maphash #'set-it (buffer-local-variables buffer))))
+
+;;; reading from the buffer
+
+(defun read-from-buffer (&aux (buffer (current-buffer)))
+  "Read 1 sexp from the buffer at the current point, moving the point to the end of what was read"
+  (when (< (buffer-char-to-aref buffer (point buffer))
+	   (buffer-gap-start buffer))
+    (gap-move-to-point buffer))
+  (multiple-value-bind (obj pos)
+      (read-from-string (buffer-data buffer) t nil
+                        :start (buffer-char-to-aref buffer (point buffer)))
+    (set-point (buffer-aref-to-char buffer pos))
+    obj))
 
 (provide :lice-0.1/buffer)

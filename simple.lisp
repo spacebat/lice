@@ -9,6 +9,27 @@
 (defvar *kill-ring-yank-pointer* nil
   "The tail of the kill ring whose car is the last thing yanked.")
 
+(defcustom *eval-expression-print-level* 4
+  "Value for `print-level' while printing value in `eval-expression'.
+A value of nil means no limit."
+  :group 'lisp
+  :type '(choice (const :tag "No Limit" nil) integer)
+  :version "21.1")
+
+(defcustom *eval-expression-print-length* 12
+  "Value for `print-length' while printing value in `eval-expression'.
+A value of nil means no limit."
+  :group 'lisp
+  :type '(choice (const :tag "No Limit" nil) integer)
+  :version "21.1")
+
+(defcustom *eval-expression-debug-on-error* t
+  "If non-nil set `debug-on-error' to t in `eval-expression'.
+If nil, don't change the value of `debug-on-error'."
+  :group 'lisp
+  :type 'boolean
+  :version "21.1")
+
 (define-condition kill-ring-empty (lice-condition)
   () (:documentation "Raised when a yank is attempted but the kill ring is empty"))
 
@@ -162,12 +183,352 @@ With arg N, insert N newlines."
   "Delete the following N characters."
   (buffer-delete (current-buffer) (point (current-buffer)) 1))
 
-(defcommand beginning-of-line ()
-  "Move the point to the beginning of the line in the current buffer."
-  (setf (marker-position (buffer-point (current-buffer))) (buffer-beginning-of-line)))
+(defun line-move-invisible-p (pos)
+  "Return non-nil if the character after POS is currently invisible."
+  (let ((prop
+	 (get-char-property pos 'invisible)))
+    (if (eq (buffer-local :buffer-invisibility-spec) t)
+	prop
+      (or (find prop (buffer-local :buffer-invisibility-spec))
+	  (assoc prop (remove-if-not 'listp (buffer-local :buffer-invisibility-spec)))))))
 
-(defcommand end-of-line ()
+(defcustom track-eol nil
+  "*Non-nil means vertical motion starting at end of line keeps to ends of lines.
+This means moving to the end of each line moved onto.
+The beginning of a blank line does not count as the end of a line."
+  :type 'boolean
+  :group 'editing-basics)
+
+(defcustom *line-move-ignore-invisible* t
+  "*Non-nil means \\[next-line] and \\[previous-line] ignore invisible lines.
+Outline mode sets this."
+  :type 'boolean
+  :group 'editing-basics)
+
+(defcustom-buffer-local :goal-column nil
+  "*Semipermanent goal column for vertical motion, as set by \\[set-goal-column], or nil."
+  :type '(choice integer
+		 (const :tag "None" nil))
+  :group 'editing-basics)
+
+(defvar *temporary-goal-column* 0
+  "Current goal column for vertical motion.
+It is the column where point was
+at the start of current run of vertical motion commands.
+When the `track-eol' feature is doing its job, the value is 9999.")
+
+(defun line-move (arg &optional noerror to-end try-vscroll)
+  "This is like line-move-1 except that it also performs
+vertical scrolling of tall images if appropriate.
+That is not really a clean thing to do, since it mixes
+scrolling with cursor motion.  But so far we don't have
+a cleaner solution to the problem of making C-n do something
+useful given a tall image."
+  ;; XXX: Fuckit the vertical scrolling for now
+;;   (if (and auto-window-vscroll try-vscroll
+;; 	   ;; But don't vscroll in a keyboard macro.
+;;            ;; FIXME: kbd macros
+;; ;; 	   (not defining-kbd-macro)
+;; ;; 	   (not executing-kbd-macro)
+;;            )
+;;       (let ((forward (> arg 0))
+;; 	    (part (nth 2 (pos-visible-in-window-p (point) nil t))))
+;; 	(if (and (consp part)
+;; 		 (> (if forward (cdr part) (car part)) 0))
+;; 	    (set-window-vscroll nil
+;; 				(if forward
+;; 				    (+ (window-vscroll nil t)
+;; 				       (min (cdr part)
+;; 					    (* (frame-char-height) arg)))
+;; 				  (max 0
+;; 				       (- (window-vscroll nil t)
+;; 					  (min (car part)
+;; 					       (* (frame-char-height) (- arg))))))
+;; 				t)
+;; 	  (set-window-vscroll nil 0)
+;; 	  (when (line-move-1 arg noerror to-end)
+;; 	    (when (not forward)
+;; 	      ;; Update display before calling pos-visible-in-window-p,
+;; 	      ;; because it depends on window-start being up-to-date.
+;; 	      (sit-for 0)
+;; 	      ;; If the current line is partly hidden at the bottom,
+;; 	      ;; scroll it partially up so as to unhide the bottom.
+;; 	      (if (and (setq part (nth 2 (pos-visible-in-window-p
+;; 					  (line-beginning-position) nil t)))
+;; 		       (> (cdr part) 0))
+;; 		  (set-window-vscroll nil (cdr part) t)))
+;; 	    t)))
+    (line-move-1 arg noerror to-end))
+;; ))
+
+(defun line-move-1 (arg &optional noerror to-end)
+  "This is the guts of next-line and previous-line.
+Arg says how many lines to move.
+The value is t if we can move the specified number of lines."
+  ;; Don't run any point-motion hooks, and disregard intangibility,
+  ;; for intermediate positions.
+  (let ((*inhibit-point-motion-hooks* t)
+	(opoint (point))
+	(forward (> arg 0)))
+    (unwind-protect
+	(progn
+	  (if (not (find *last-command* '(next-line previous-line)))
+	      (setq *temporary-goal-column*
+		    (if (and track-eol (eolp)
+			     ;; Don't count beg of empty line as end of line
+			     ;; unless we just did explicit end-of-line.
+			     (or (not (bolp)) (eq *last-command* 'move-end-of-line)))
+			9999
+		      (current-column))))
+
+	  (if (and (not (integerp (buffer-local :selective-display)))
+		   (not *line-move-ignore-invisible*))
+	      ;; Use just newline characters.
+	      ;; Set ARG to 0 if we move as many lines as requested.
+	      (or (if (> arg 0)
+		      (progn (if (> arg 1) (forward-line (1- arg)))
+			     ;; This way of moving forward ARG lines
+			     ;; verifies that we have a newline after the last one.
+			     ;; It doesn't get confused by intangible text.
+			     (end-of-line)
+			     (if (zerop (forward-line 1))
+				 (setq arg 0)))
+		    (and (zerop (forward-line arg))
+			 (bolp)
+			 (setq arg 0)))
+		  (unless noerror
+		    (signal (if (< arg 0)
+				'beginning-of-buffer
+			      'end-of-buffer)
+			    nil)))
+	    ;; Move by arg lines, but ignore invisible ones.
+	    (let (done)
+	      (while (and (> arg 0) (not done))
+		;; If the following character is currently invisible,
+		;; skip all characters with that same `invisible' property value.
+		(while (and (not (eobp)) (line-move-invisible-p (point)))
+		  (goto-char (next-char-property-change (point))))
+		;; Now move a line.
+		(end-of-line)
+		;; If there's no invisibility here, move over the newline.
+		(cond
+		 ((eobp)
+		  (if (not noerror)
+		      (signal 'end-of-buffer)
+		    (setq done t)))
+		 ((and (> arg 1)  ;; Use vertical-motion for last move
+		       (not (integerp (buffer-local :selective-display)))
+		       (not (line-move-invisible-p (point))))
+		  ;; We avoid vertical-motion when possible
+		  ;; because that has to fontify.
+		  (forward-line 1))
+		 ;; Otherwise move a more sophisticated way.
+		 ((zerop (vertical-motion 1))
+		  (if (not noerror)
+		      (signal 'end-of-buffer)
+		    (setq done t))))
+		(unless done
+		  (setq arg (1- arg))))
+	      ;; The logic of this is the same as the loop above,
+	      ;; it just goes in the other direction.
+	      (while (and (< arg 0) (not done))
+		(beginning-of-line)
+		(cond
+		 ((bobp)
+		  (if (not noerror)
+		      (signal 'beginning-of-buffer nil)
+		    (setq done t)))
+		 ((and (< arg -1) ;; Use vertical-motion for last move
+		       (not (integerp (buffer-local :selective-display)))
+		       (not (line-move-invisible-p (1- (point)))))
+		  (forward-line -1))
+		 ((zerop (vertical-motion -1))
+		  (if (not noerror)
+		      (signal 'beginning-of-buffer nil)
+		    (setq done t))))
+		(unless done
+		  (setq arg (1+ arg))
+		  (while (and ;; Don't move over previous invis lines
+			  ;; if our target is the middle of this line.
+			  (or (zerop (or (buffer-local :goal-column) *temporary-goal-column*))
+			      (< arg 0))
+			  (not (bobp)) (line-move-invisible-p (1- (point))))
+		    (goto-char (previous-char-property-change (point))))))))
+	  ;; This is the value the function returns.
+	  (= arg 0))
+
+      (cond ((> arg 0)
+	     ;; If we did not move down as far as desired,
+	     ;; at least go to end of line.
+	     (end-of-line))
+	    ((< arg 0)
+	     ;; If we did not move up as far as desired,
+	     ;; at least go to beginning of line.
+	     (beginning-of-line))
+	    (t
+	     (line-move-finish (or (buffer-local :goal-column) *temporary-goal-column*)
+			       opoint forward))))))
+
+(defun line-move-finish (column opoint forward)
+  (let ((repeat t))
+    (while repeat
+      ;; Set REPEAT to t to repeat the whole thing.
+      (setq repeat nil)
+
+      (let (new
+	    (line-beg (save-excursion (beginning-of-line) (point)))
+	    (line-end
+	     ;; Compute the end of the line
+	     ;; ignoring effectively invisible newlines.
+	     (save-excursion
+	       ;; Like end-of-line but ignores fields.
+	       (skip-chars-forward "^\n")
+	       (while (and (not (eobp)) (line-move-invisible-p (point)))
+		 (goto-char (next-char-property-change (point)))
+		 (skip-chars-forward "^\n"))
+	       (point))))
+
+	;; Move to the desired column.
+	(line-move-to-column column)
+	(setq new (point))
+
+	;; Process intangibility within a line.
+	;; With inhibit-point-motion-hooks bound to nil, a call to
+	;; goto-char moves point past intangible text.
+
+	;; However, inhibit-point-motion-hooks controls both the
+	;; intangibility and the point-entered/point-left hooks.  The
+	;; following hack avoids calling the point-* hooks
+	;; unnecessarily.  Note that we move *forward* past intangible
+	;; text when the initial and final points are the same.
+	(goto-char new)
+	(let ((inhibit-point-motion-hooks nil))
+	  (goto-char new)
+
+	  ;; If intangibility moves us to a different (later) place
+	  ;; in the same line, use that as the destination.
+	  (if (<= (point) line-end)
+	      (setq new (point))
+	    ;; If that position is "too late",
+	    ;; try the previous allowable position.
+	    ;; See if it is ok.
+              (progn
+                (backward-char)
+                (if (if forward
+                        ;; If going forward, don't accept the previous
+                        ;; allowable position if it is before the target line.
+                        (< line-beg (point))
+                        ;; If going backward, don't accept the previous
+                        ;; allowable position if it is still after the target line.
+                        (<= (point) line-end))
+                    (setq new (point))
+                    ;; As a last resort, use the end of the line.
+                    (setq new line-end)))))
+
+	;; Now move to the updated destination, processing fields
+	;; as well as intangibility.
+	(goto-char opoint)
+	(let ((inhibit-point-motion-hooks nil))
+	  (goto-char
+	   (constrain-to-field new opoint nil t
+			       'inhibit-line-move-field-capture)))
+
+	;; If all this moved us to a different line,
+	;; retry everything within that new line.
+	(when (or (< (point) line-beg) (> (point) line-end))
+	  ;; Repeat the intangibility and field processing.
+	  (setq repeat t))))))
+
+(defun line-move-to-column (col)
+  "Try to find column COL, considering invisibility.
+This function works only in certain cases,
+because what we really need is for `move-to-column'
+and `current-column' to be able to ignore invisible text."
+  (if (zerop col)
+      (beginning-of-line)
+      (let ((opoint (point)))
+        (move-to-column col)
+        ;; move-to-column doesn't respect field boundaries.
+        (goto-char (constrain-to-field (point) opoint))))
+
+  (when (and *line-move-ignore-invisible*
+	     (not (bolp)) (line-move-invisible-p (1- (point))))
+    (let ((normal-location (point))
+	  (normal-column (current-column)))
+      ;; If the following character is currently invisible,
+      ;; skip all characters with that same `invisible' property value.
+      (while (and (not (eobp))
+		  (line-move-invisible-p (point)))
+	(goto-char (next-char-property-change (point))))
+      ;; Have we advanced to a larger column position?
+      (if (> (current-column) normal-column)
+	  ;; We have made some progress towards the desired column.
+	  ;; See if we can make any further progress.
+	  (line-move-to-column (+ (current-column) (- col normal-column)))
+          ;; Otherwise, go to the place we originally found
+          ;; and move back over invisible text.
+          ;; that will get us to the same place on the screen
+          ;; but with a more reasonable buffer position.
+          (progn
+            (goto-char normal-location)
+            (let ((line-beg (save-excursion (beginning-of-line) (point))))
+              (while (and (not (bolp)) (line-move-invisible-p (1- (point))))
+                (goto-char (previous-char-property-change (point) line-beg)))))))))
+
+(defcommand beginning-of-line ((&optional (n 1))
+                               :prefix)
+  "Move the point to the beginning of the line in the current buffer."
+  (check-type n number)
+  (set-point (line-beginning-position n)))
+
+(defcommand move-beginning-of-line ((arg)
+                                    :prefix)
+  "Move point to beginning of current line as displayed.
+\(If there's an image in the line, this disregards newlines
+which are part of the text that the image rests on.)
+
+With argument ARG not nil or 1, move forward ARG - 1 lines first.
+If point reaches the beginning or end of buffer, it stops there.
+To ignore intangibility, bind `inhibit-point-motion-hooks' to t."
+  (or arg (setq arg 1))
+
+  (let ((orig (point))
+	start first-vis first-vis-field-value)
+
+    ;; Move by lines, if ARG is not 1 (the default).
+    (if (/= arg 1)
+	(line-move (1- arg) t))
+
+    ;; Move to beginning-of-line, ignoring fields and invisibles.
+    (skip-chars-backward "\\n\\n") ;; FIXME: was "^\n"
+    (while (and (not (bobp)) (line-move-invisible-p (1- (point))))
+      (goto-char (previous-char-property-change (point)))
+      (skip-chars-backward "\\n\\n")) ;; FIXME: was "^\n"
+    (setq start (point))
+
+    ;; Now find first visible char in the line
+    (while (and (not (eobp)) (line-move-invisible-p (point)))
+      (goto-char (next-char-property-change (point))))
+    (setq first-vis (point))
+
+    ;; See if fields would stop us from reaching FIRST-VIS.
+    (setq first-vis-field-value
+	  (constrain-to-field first-vis orig (/= arg 1) t nil))
+
+    (goto-char (if (/= first-vis-field-value first-vis)
+		   ;; If yes, obey them.
+		   first-vis-field-value
+                   ;; Otherwise, move to START with attention to fields.
+                   ;; (It is possible that fields never matter in this case.)
+                   (constrain-to-field (point) orig
+                                       (/= arg 1) t nil)))))
+
+
+(defcommand end-of-line ((&optional n)
+                         :prefix)
   "Move the point to the end of the line in the current buffer."
+  ;; FIXME: handle prefix
+  (declare (ignore n))
   (setf (marker-position (buffer-point (current-buffer))) (buffer-end-of-line)))
 
 (defcommand erase-buffer ((&optional buffer))
@@ -175,15 +536,14 @@ With arg N, insert N newlines."
   (buffer-erase (or buffer (current-buffer))))
 
 (defcommand execute-extended-command ((prefix)
-				      :prefix)
+				      :raw-prefix)
   "Read a user command from the minibuffer."
-  (let ((cmd (read-command  (case prefix
+  (let ((cmd (read-command  (case (prefix-numeric-value prefix)
 				       (1 "M-x ")
 				       (4 "C-u M-x ")
 				       (t (format nil "~a M-x " prefix))))))
     (if (lookup-command cmd)
 	(progn
-	  (setf *prefix-arg* prefix)
 	  (dispatch-command cmd))
       (message "No Match"))))
 
@@ -245,10 +605,15 @@ with SIGHUP."
       (error "No such buffer ~a" buffer))))
 
 (defun eval-echo (string)
-  (multiple-value-bind (sexpr pos) (read-from-string string)
-    (if (= pos (length string))
-	(message "~s" (eval sexpr))
-      (error "Trailing garbage is ~a" string))))
+  ;; FIXME: don't just abandon the output
+  (let* ((stream (make-string-output-stream))
+         (*standard-output* stream)
+         (*error-output* stream)
+         (*debug-io* stream))
+    (multiple-value-bind (sexpr pos) (read-from-string string)
+      (if (= pos (length string))
+          (message "~s" (eval sexpr))
+          (error "Trailing garbage is ~a" string)))))
 
 (defun eval-print (string)
   (multiple-value-bind (sexpr pos) (read-from-string string)
@@ -322,7 +687,7 @@ of the accessible part of the buffer."
     (delete-region
      (point)
      (progn
-       (skip-chars-forward (coerce '(#\Space #\Tab) 'string))
+       (skip-whitespace-forward)
        (constrain-to-field nil orig-pos t)))))
 
 (defcommand beginning-of-buffer ()
@@ -709,5 +1074,15 @@ With argument 0, interchanges line point is in with line mark is in."
      (insert (delete-and-extract-region (car pos1) (cdr pos1)))
      (goto-char (car pos1))
      (insert word2)))
+
+;;; 
+
+(defcustom-buffer-local :fill-prefix nil
+  "*String for filling to insert at front of new line, or nil for none."
+  :type '(choice (const :tag "None" nil)
+		 string)
+  :group 'fill)
+
+
 
 (provide :lice-0.1/simple)

@@ -155,7 +155,7 @@ If nil, indent backquoted lists as data, i.e., like quoted lists."
         (let ((containing-sexp (point)))
           (forward-char 1)
           ;;(message "first one!")
-          (parse-partial-sexp (point) indent-point 1 t)
+          (parse-partial-sexp (point) indent-point :target-depth 1 :stop-before t)
           ;; Move to the car of the relevant containing form
           (let (tem function method tentative-defun)
             (if (not (looking-at "\\w|\\s"))
@@ -190,7 +190,7 @@ If nil, indent backquoted lists as data, i.e., like quoted lists."
                                    (progn
                                      ;;(message "second one!")
                                      (parse-partial-sexp (point)
-                                                         indent-point 1 t)
+                                                         indent-point :target-depth 1 :stop-before t)
                                      (setq n (1+ n))
                                      t)))
                            (error () nil))))
@@ -402,7 +402,7 @@ If nil, indent backquoted lists as data, i.e., like quoted lists."
     (save-excursion
       (goto-char indent-point)
       (beginning-of-line)
-      (skip-chars-forward (coerce '(#\Space #\Tab) 'string))
+      (skip-whitespace-forward)
       (list (cond ((looking-at "\\w|\\w") ;; used to be symbol constituent \\s_
                    ;; a tagbody tag
                    (+ sexp-column lisp-tag-indentation))

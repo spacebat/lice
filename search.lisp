@@ -177,3 +177,14 @@ matched by the parenthesis constructions in regexp."
 			       :end end
 			       :reg-starts reg-starts
 			       :reg-ends reg-ends)))))
+
+(defun regexp-quote (string)
+  "Return a regexp string which matches exactly STRING and nothing else."
+  (check-type string string)
+  (coerce
+   (loop for c across string
+      when (find c "[*.\\?+^$" :test 'char=)
+      collect #\\
+      collect c)
+   'string))
+  

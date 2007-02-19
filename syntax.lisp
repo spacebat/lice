@@ -48,8 +48,8 @@
   (setf (gethash char (syntax-table-hash table)) descriptor))
 
 (defvar *syntax-code-object* (loop for i in +syntax-classes+
+                                  collect i
 				  collect (make-syntax-descriptor :class i :flags nil))
-
   "A pool of syntax descriptors to be shared in the standard
 syntax table in an attempt to save memory. FIXME: premature
 optimization?")
@@ -103,6 +103,9 @@ optimization?")
   "The standard syntax table")
 
 (defun make-syntax-table (&optional (parent *standard-syntax-table*))
+  "Return a new syntax table.
+Create a syntax table which inherits from parent (if non-nil) or
+from `standard-syntax-table' otherwise."
   (make-instance 'syntax-table
 		 :parent parent))
 
@@ -139,12 +142,12 @@ the symbol `:WORD-CONSTITUENT' is returned."
   "Non-nil means `forward-word', etc., should treat escape chars part of words.")
 
 (defun syntax-after (pos &aux (buffer (current-buffer)))
-  "Return the raw syntax of the char after pos.
-If pos is outside the buffer's accessible portion, return nil."
-  (let* ((ch (buffer-char-after buffer pos))
-	 (descr (and ch (gethash ch (syntax-table buffer)))))
-    (when descr
-      (syntax-descriptor-class descr))))
+  "Return the raw syntax of the char after POS.
+If POS is outside the buffer's accessible portion, return nil."
+  (unless (or (< pos (point-min)) (>= pos (point-max)))
+    (let* ((ch (buffer-char-after buffer pos))
+           (descr (and ch (gethash ch (syntax-table buffer)))))
+      descr)))
 
 ;; FIXME: having the flags as a list is memory intensive. How about a
 ;; bit vector or number and a function that converts between the two?
@@ -234,6 +237,28 @@ If pos is outside the buffer's accessible portion, return nil."
 
 (defun &syntax-flags-comment-nested (syntax)
   (and (find :comment-nested (syntax-descriptor-flags syntax)) t))
+
+(defmacro with-syntax-table (table &body body)
+  "Evaluate BODY with syntax table of current buffer set to TABLE.
+The syntax table of the current buffer is saved, BODY is evaluated, and the
+saved table is restored, even in case of an abnormal exit.
+Value is what BODY returns."
+  (let ((old-table (gensym "TABLE"))
+	(old-buffer (gensym "BUFFER")))
+    `(let ((,old-table (syntax-table))
+	   (,old-buffer (current-buffer)))
+       (unwind-protect
+	   (progn
+	     (set-syntax-table ,table)
+	     ,@body)
+	 (save-current-buffer
+	   (set-buffer ,old-buffer)
+	   (set-syntax-table ,old-table))))))
+
+(defun syntax-class (syntax)
+  "Return the syntax class part of the syntax descriptor SYNTAX.
+If SYNTAX is nil, return nil."
+  (&syntax-flags-syntax syntax))
 
 (defun scan-words (from count)
   "Return the position across COUNT words from FROM.
@@ -526,6 +551,10 @@ update the global data."
 (defun skip-chars-backward (string &optional (lim (begv)))
   "Move point backward, stopping after a char not in string."
   (skip-chars nil nil string lim))
+
+(defun skip-whitespace-forward (&optional (lim (zv)))
+  "Move point forward, stopping before a char that is not a space or tab."
+  (skip-chars-forward (coerce '(#\Space #\Tab) 'string) lim))
 
 (defun &back-comment (from from-aref stop comment-nested comment-style buffer table)
   "Checks whether charpos FROM is at the end of a comment.
@@ -1462,7 +1491,7 @@ after the beginning of a string, or after the end of a string."
                    (when (< depth min-depth)
                      (setf min-depth depth))
                    (unless (= (length levels) 1)
-                     (message "OKAY HERE!")
+                     (message "XXX: popping when levels is 1!")
                      (pop levels))
                    (setf (syntax-level-prev (cur-level)) (syntax-level-last (cur-level)))
                    (when (= target-depth depth)
@@ -1506,27 +1535,27 @@ after the beginning of a string, or after the end of a string."
             (parse-state-level-starts state) (mapcar 'syntax-level-last (cdr levels)))
       state)))
 
-(defun parse-partial-sexp (from to &optional (target-depth -100000) stop-before old-state comment-stop &aux (buffer (current-buffer)) (table (syntax-table)))
+(defun parse-partial-sexp (from to &key (target-depth -100000) stop-before old-state comment-stop &aux (buffer (current-buffer)) (table (syntax-table)))
   "Parse Lisp syntax starting at FROM until TO; return status of parse at TO.
 Parsing stops at TO or when certain criteria are met;
  point is set to where parsing stops.
 If fifth arg OLDSTATE is omitted or nil,
  parsing assumes that FROM is the beginning of a function.
 Value is a list of elements describing final state of parsing:
- 0. depth in parens.
- 1. character address of start of innermost containing list; nil if none.
- 2. character address of start of last complete sexp terminated.
+ 0. depth in parens. parse-state-depth
+ 1. character address of start of innermost containing list; nil if none. parse-state-prev-level-start
+ 2. character address of start of last complete sexp terminated. parse-state-this-level-start
  3. non-nil if inside a string.
     (it is the character that will terminate the string,
-     or t if the string should be terminated by a generic string delimiter.)
+     or t if the string should be terminated by a generic string delimiter.) parse-state-in-string
  4. nil if outside a comment, t if inside a non-nestable comment,
-    else an integer (the current comment nesting).
- 5. t if following a quote character.
- 6. the minimum paren-depth encountered during this scan.
+    else an integer (the current comment nesting). parse-state-in-comment
+ 5. t if following a quote character. parse-state-quoted
+ 6. the minimum paren-depth encountered during this scan. parse-state-min-depth
  7. t if in a comment of style b; symbol `syntax-table' if the comment
-    should be terminated by a generic comment delimiter.
- 8. character address of start of comment or string; nil if not in one.
- 9. Intermediate data for continuation of parsing (subject to change).
+    should be terminated by a generic comment delimiter. parse-state-comment-style
+ 8. character address of start of comment or string; nil if not in one. parse-state-in-comment
+ 9. Intermediate data for continuation of parsing (subject to change). parse-state-level-starts
 If third arg TARGETDEPTH is non-nil, parsing stops if the depth
 in parentheses becomes equal to TARGETDEPTH.
 Fourth arg STOPBEFORE non-nil means stop when come to

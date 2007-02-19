@@ -108,6 +108,7 @@ TYPE isn't used yet. it's just there for hype."
 			   :bpoint bpoint
 			   :point-col 0
 			   :point-line 0)))
+    (set-marker bpoint (point buffer) buffer)
     w))
 
 (defun make-test-window (buffer)
@@ -703,5 +704,26 @@ LINES many lines, moving the window point to be visible."
 	    (typep (frame-window-tree frame) 'window))
     (error "Attempt to delete minibuffer or sole ordinary window")))
 
+(defun pos-visible-in-window-p (&optional (pos (point)) (window (selected-window)) partially)
+  "Return non-nil if position POS is currently on the frame in WINDOW.
+Return nil if that position is scrolled vertically out of view.
+If a character is only partially visible, nil is returned, unless the
+optional argument PARTIALLY is non-nil.
+If POS is only out of view because of horizontal scrolling, return non-nil.
+If POS is t, it specifies the position of the last visible glyph in WINDOW.
+POS defaults to point in WINDOW; WINDOW defaults to the selected window.
 
+If POS is visible, return t if PARTIALLY is nil; if PARTIALLY is non-nil,
+return value is a list of 2 or 6 elements (X Y [RTOP RBOT ROWH VPOS]),
+where X and Y are the pixel coordinates relative to the top left corner
+of the window.  The remaining elements are omitted if the character after
+POS is fully visible; otherwise, RTOP and RBOT are the number of pixels
+off-window at the top and bottom of the row, ROWH is the height of the
+display row, and VPOS is the row number (0-based) containing POS."
+  (check-type pos number)
+  (check-type window window)
+  ;; FIXME: horizontal scrolling. and all the partial stuff aint there
+  (or (< pos (marker-position (window-top window)))
+      (> pos (marker-position (window-bottom window)))))
+  
 (provide :lice-0.1/window)

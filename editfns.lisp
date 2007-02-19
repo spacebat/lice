@@ -276,7 +276,7 @@ Field boundaries are not noticed if `inhibit-field-text-motion' is non-nil."
                    ;; there's an intervening newline or not.
                    (progn
                      (multiple-value-bind (p nfound)
-                         (buffer-scan-newline new-pos field-bound (if fwd -1 1))
+                         (buffer-scan-newline (current-buffer) new-pos field-bound (if fwd -1 1))
                        (declare (ignore p))
                        (zerop nfound)))))
           ;; Constrain NEW_POS to FIELD_BOUND.
@@ -399,5 +399,23 @@ Point, and before-insertion markers, are relocated as in the function `insert'.
   (unless (< count 0)
     (dotimes (i count)
       (insert character))))
+
+(defun line-beginning-position (n)
+  "Return the character position of the first character on the current line.
+With argument N not nil or 1, move forward N - 1 lines first.
+If scan reaches end of buffer, return that position.
+
+This function constrains the returned position to the current field
+unless that would be on a different line than the original,
+unconstrained result.  If N is nil or 1, and a front-sticky field
+starts at point, the scan stops as soon as it starts.  To ignore field
+boundaries bind `inhibit-field-text-motion' to t.
+
+This function does not move point."
+  ;; FIXME: inhibit-point-motion-hooks
+  (let ((pt (save-excursion
+              (forward-line (if n (1- n) 0))
+              (point))))
+    (constrain-to-field pt (point) (not (eql n 1)) t nil)))
 
 (provide :lice-0.1/editfns)

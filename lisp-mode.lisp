@@ -61,6 +61,8 @@ See function `beginning-of-defun'."
 	  (define-key m (make-instance 'key :char #\j :control t) 'eval-print-last-sexp)
 	  (define-key m (make-instance 'key :char #\Tab) 'lisp-indent-line)
 	  (define-key m (make-instance 'key :char #\i :control t) 'lisp-indent-line)
+          (define-key m (make-instance 'key :char #\q :control t :meta t) 'indent-sexp)
+          (define-key m (make-instance 'key :char #\x :control t :meta t) 'eval-defun)
 	  m))
   "Lisp mode"
   (set-syntax-table *lisp-mode-syntax-table*))
@@ -77,7 +79,8 @@ This is used to find the end of the defun instead of using the normal
 recipe (see `end-of-defun').  Major modes can define this if the
 normal method is not appropriate.")
 
-(defun end-of-defun (&optional arg)
+(defcommand end-of-defun ((&optional arg)
+                          :prefix)
   "Move forward to next end of defun.
 With argument, do it that many times.
 Negative argument -N means move back to Nth preceding end of defun.
@@ -88,7 +91,6 @@ matches the open-parenthesis that starts a defun; see function
 
 If variable `*end-of-defun-function*' is non-nil, its value
 is called as a function to find the defun's end."
-  (interactive "p")
   (or (not (eq *this-command* 'end-of-defun))
       (eq *last-command* 'end-of-defun)
       ;;XXX (and transient-mark-mode mark-active)
@@ -115,7 +117,7 @@ is called as a function to find the defun's end."
                          (beginning-of-defun-raw -1)))
                    (setq first nil)
                    (forward-list 1)
-                   (skip-chars-forward (coerce '(#\Space #\Tab) 'string))
+                   (skip-whitespace-forward)
                    (if (looking-at ";|\\n") ; XXX: used to be comment starter \\s<
                        (forward-line 1))
                    (<= (point) pos))))
@@ -129,7 +131,7 @@ is called as a function to find the defun's end."
 	      (if (beginning-of-defun-raw 2)
 		  (progn
 		    (forward-list 1)
-		    (skip-chars-forward (coerce '(#\Space #\Tab) 'string))
+		    (skip-whitespace-forward)
 		    (if (looking-at ";|\\n") ; XXX: used to be comment starter \\s<
 			(forward-line 1)))
 		(goto-char (point-min)))))
@@ -181,7 +183,7 @@ Negative arg -N means move forward across N groups of parentheses."
     (setf end (point))
     (goto-char start)
     (handler-case (eval-echo (buffer-substring-no-properties start end))
-      (error (c) (message "Eval error: ~s" c)))))
+      (error (c) (message "Eval error: ~a" c)))))
 
 (defcommand eval-print-last-sexp ()
   (let ((start (point))
@@ -191,7 +193,7 @@ Negative arg -N means move forward across N groups of parentheses."
     (setf end (point))
     (goto-char start)
     (handler-case (eval-print (buffer-substring-no-properties start end))
-      (error (c) (message "Eval error: ~s" c)))))
+      (error (c) (message "Eval error: ~a" c)))))
 
 (defcommand lisp-interaction-mode ()
   (set-major-mode lisp-interaction-mode))
@@ -209,7 +211,7 @@ rigidly along with this one."
   (let ((indent (calculate-lisp-indent)) shift-amt end
 	(pos (- (point-max) (point)))
 	(beg (progn (beginning-of-line) (point))))
-    (skip-chars-forward (coerce '(#\Space #\Tab) 'string))
+    (skip-whitespace-forward)
     (if (or (null indent) (looking-at ";;;")) ; XXX: used to be comment starter \\s<
 	;; Don't alter indentation of a ;;; comment line
 	;; or a line that starts in a string.
@@ -272,7 +274,7 @@ is the buffer position of the start of the containing expression."
       ;; Find outermost containing sexp
       (while (< (point) indent-point)
         (message "flitz ~d" indent-point (point))
-        (setq state (parse-partial-sexp (point) indent-point 0)))
+        (setq state (parse-partial-sexp (point) indent-point :target-depth 0)))
       ;; Find innermost containing sexp
       (while (and retry
 		  state
@@ -288,7 +290,7 @@ is the buffer position of the start of the containing expression."
 		 (> *calculate-lisp-indent-last-sexp* (point)))
             ;; Yes, but is there a containing sexp after that?
             (let ((peek (parse-partial-sexp *calculate-lisp-indent-last-sexp*
-					    indent-point 0)))
+					    indent-point :target-depth 0)))
               (if (setq retry (parse-state-prev-level-start peek)) (setq state peek)))))
       (message "retry ~a" retry)
       (if retry
@@ -302,7 +304,7 @@ is the buffer position of the start of the containing expression."
                 (setq desired-indent (current-column))
                 (progn
                   ;; Find the start of first element of containing sexp.
-                  (parse-partial-sexp (point) *calculate-lisp-indent-last-sexp* 0 t)
+                  (parse-partial-sexp (point) *calculate-lisp-indent-last-sexp* :target-depth 0 :stop-before t)
                   (cond ((looking-at "\\(") ; XXX used to be open \\s(
                          ;; First element of containing sexp is a list.
                          ;; Indent under that list.
@@ -321,7 +323,7 @@ is the buffer position of the start of the containing expression."
                              (progn (forward-sexp 1)
                                     (parse-partial-sexp (point)
                                                         *calculate-lisp-indent-last-sexp*
-                                                        0 t)))
+                                                        :target-depth 0 :stop-before t)))
                          (backward-prefix-chars))
                         (t
                          ;; Indent beneath first sexp on same line as
@@ -330,7 +332,7 @@ is the buffer position of the start of the containing expression."
                          (goto-char *calculate-lisp-indent-last-sexp*)
                          (beginning-of-line)
                          (parse-partial-sexp (point) *calculate-lisp-indent-last-sexp*
-                                             0 t)
+                                             :target-depth 0 :stop-before t)
                          (backward-prefix-chars)))))))
       ;; Point is at the point to indent under unless we are inside a string.
       ;; Call indentation hook except when overridden by *lisp-indent-offset*
@@ -431,20 +433,258 @@ means don't indent that line."
 	  (setq state (parse-partial-sexp (point)
 					  (progn
 					    (forward-line 1) (point))
-					  nil nil state)))
+					  :old-state state)))
       (while (< (point) end)
 	(or (car (nthcdr 3 state))
 	    (and nochange-regexp
 		 (looking-at nochange-regexp))
 	    ;; If line does not start in string, indent it
 	    (let ((indent (current-indentation)))
-	      (delete-region (point) (progn (skip-chars-forward (coerce '(#\Space #\Tab) 'string)) (point)))
+	      (delete-region (point) (progn (skip-whitespace-forward) (point)))
 	      (or (eolp)
 		  (indent-to (max 0 (+ indent arg)) 0))))
 	(setq state (parse-partial-sexp (point)
 					(progn
 					  (forward-line 1) (point))
-					nil nil state))))))
+					:old-state state))))))
+
+
+(defcommand indent-sexp ((&optional endpos))
+  "Indent each line of the list starting just after point.
+If optional arg ENDPOS is given, indent each line, stopping when
+ENDPOS is encountered."
+  (let ((indent-stack (list nil))
+	(next-depth 0)
+	;; If ENDPOS is non-nil, use nil as STARTING-POINT
+	;; so that calculate-lisp-indent will find the beginning of
+	;; the defun we are in.
+	;; If ENDPOS is nil, it is safe not to scan before point
+	;; since every line we indent is more deeply nested than point is.
+	(starting-point (if endpos nil (point)))
+	(last-point (point))
+	last-depth bol outer-loop-done inner-loop-done state this-indent)
+    (or endpos
+	;; Get error now if we don't have a complete sexp after point.
+	(save-excursion (forward-sexp 1)))
+    (save-excursion
+      (setq outer-loop-done nil)
+      (while (if endpos (< (point) (ensure-number endpos))
+	       (not outer-loop-done))
+	(setq last-depth next-depth
+	      inner-loop-done nil)
+	;; Parse this line so we can learn the state
+	;; to indent the next line.
+	;; This inner loop goes through only once
+	;; unless a line ends inside a string.
+	(while (and (not inner-loop-done)
+		    (not (setq outer-loop-done (eobp))))
+	  (setq state (parse-partial-sexp (point) (progn (end-of-line) (point))
+					  :old-state state))
+	  (setq next-depth (parse-state-depth state))
+	  ;; If the line contains a comment other than the sort
+	  ;; that is indented like code,
+	  ;; indent it now with indent-for-comment.
+	  ;; Comments indented like code are right already.
+	  ;; In any case clear the in-comment flag in the state
+	  ;; because parse-partial-sexp never sees the newlines.
+	  (if (parse-state-in-comment state) ;;(car (nthcdr 4 state))
+	      (progn (indent-for-comment)
+		     (end-of-line)
+		     (setf (parse-state-in-comment state) nil))) ;;(setcar (nthcdr 4 state) nil)))
+	  ;; If this line ends inside a string,
+	  ;; go straight to next line, remaining within the inner loop,
+	  ;; and turn off the \-flag.
+	  (if (parse-state-in-string state) ;;(car (nthcdr 3 state))
+	      (progn
+		(forward-line 1)
+		(setf (parse-state-in-string state) nil));;(setf (car (nthcdr 5 state)) nil))
+	    (setq inner-loop-done t)))
+	(and endpos
+	     (<= next-depth 0)
+	     (progn
+	       (setq indent-stack (nconc indent-stack
+					 (make-list (- next-depth) :initial-element nil))
+		     last-depth (- last-depth next-depth)
+		     next-depth 0)))
+	(or outer-loop-done endpos
+	    (setq outer-loop-done (<= next-depth 0)))
+	(if outer-loop-done
+	    (forward-line 1)
+            (progn
+              (while (> last-depth next-depth)
+                (setq indent-stack (cdr indent-stack)
+                      last-depth (1- last-depth)))
+              (while (< last-depth next-depth)
+                (setq indent-stack (cons nil indent-stack)
+                      last-depth (1+ last-depth)))
+              ;; Now go to the next line and indent it according
+              ;; to what we learned from parsing the previous one.
+              (forward-line 1)
+              (setq bol (point))
+              (skip-whitespace-forward)
+              ;; But not if the line is blank, or just a comment
+              ;; (except for double-semi comments; indent them as usual).
+              (if (or (eobp) (looking-at "\\w|\\n")) ;; FIXME: used to be "\\s<|\\n"
+                  nil
+                  (progn
+                    (if (and (car indent-stack)
+                             (>= (car indent-stack) 0))
+                        (setq this-indent (car indent-stack))
+                        (let ((val (calculate-lisp-indent
+                                    (if (car indent-stack) (- (car indent-stack))
+                                        starting-point))))
+                          (if (null val)
+                              (setq this-indent val)
+                              (if (integerp val)
+                                  (setf (car indent-stack)
+                                        (setq this-indent val))
+                                  (progn
+                                    (setf (car indent-stack) (- (car (cdr val))))
+                                    (setq this-indent (car val)))))))
+                    (if (and this-indent (/= (current-column) this-indent))
+                        (progn (delete-region bol (point))
+                               (indent-to this-indent)))))))
+	(or outer-loop-done
+	    (setq outer-loop-done (= (point) last-point))
+	    (setq last-point (point)))))))
+
+(defun lisp-indent-region (start end)
+  "Indent every line whose first char is between START and END inclusive."
+  (save-excursion
+    (let ((endmark (copy-marker end)))
+      (goto-char start)
+      (and (bolp) (not (eolp))
+	   (lisp-indent-line))
+      (indent-sexp endmark)
+      (set-marker endmark nil))))
+
+(defun eval-defun-1 (form)
+  "Treat some expressions specially.
+Reset the `defvar' and `defcustom' variables to the initial value.
+Reinitialize the face according to the `defface' specification."
+  ;; The code in edebug-defun should be consistent with this, but not
+  ;; the same, since this gets a macroexpended form.
+  (cond ((not (listp form))
+	 form)
+	((and (eq (car form) 'defvar)
+	      (cdr-safe (cdr-safe form))
+	      (boundp (cadr form)))
+	 ;; Force variable to be re-set.
+	 `(progn (defvar ,(nth 1 form) nil ,@(nthcdr 3 form))
+		 (setf ,(nth 1 form) ,(nth 2 form)))) ;; used to be setq-default
+	;; `defcustom' is now macroexpanded to
+	;; `custom-declare-variable' with a quoted value arg.
+	((and (eq (car form) 'custom-declare-variable)
+	      (boundp (eval (nth 1 form)))) ;; used to be default-boundp
+	 ;; Force variable to be bound.
+         ;; XXX: we can't handle defcustom
+	 ;;(set-default (eval (nth 1 form)) (eval (nth 1 (nth 2 form))))
+	 form)
+	;; `defface' is macroexpanded to `custom-declare-face'.
+	((eq (car form) 'custom-declare-face)
+	 ;; Reset the face.
+         ;; XXX: what do we do with this?
+;; 	  (setq face-new-frame-defaults
+;;  	       (assq-delete-all (eval (nth 1 form)) face-new-frame-defaults))
+;; 	 (put (eval (nth 1 form)) 'face-defface-spec nil)
+;; 	 ;; Setting `customized-face' to the new spec after calling
+;; 	 ;; the form, but preserving the old saved spec in `saved-face',
+;; 	 ;; imitates the situation when the new face spec is set
+;; 	 ;; temporarily for the current session in the customize
+;; 	 ;; buffer, thus allowing `face-user-default-spec' to use the
+;; 	 ;; new customized spec instead of the saved spec.
+;; 	 ;; Resetting `saved-face' temporarily to nil is needed to let
+;; 	 ;; `defface' change the spec, regardless of a saved spec.
+;; 	 (prog1 `(prog1 ,form
+;; 		   (put ,(nth 1 form) 'saved-face
+;; 			',(get (eval (nth 1 form)) 'saved-face))
+;; 		   (put ,(nth 1 form) 'customized-face
+;; 			,(nth 2 form)))
+;; 	   (put (eval (nth 1 form)) 'saved-face nil))
+         )
+	((eq (car form) 'progn)
+	 (cons 'progn (mapcar 'eval-defun-1 (cdr form))))
+	(t form)))
+
+(defcommand eval-defun-2 ()
+  "Evaluate defun that point is in or before.
+The value is displayed in the minibuffer.
+If the current defun is actually a call to `defvar',
+then reset the variable using the initial value expression
+even if the variable already has some other value.
+\(Normally `defvar' does not change the variable's value
+if it already has a value.\)
+
+With argument, insert value in current buffer after the defun.
+Return the result of evaluation."
+  (let* ((*debug-on-error* *eval-expression-debug-on-error*)
+         (*print-length* *eval-expression-print-length*)
+         (*print-level* *eval-expression-print-level*)
+         ;; FIXME: accum the eval/compiler output and i guess do
+         ;; something with it, cept in this case we don't.
+         (*debug-io* (make-string-output-stream))
+         (*standard-output* *debug-io*)
+         (*error-output* *debug-io*))
+    (save-excursion
+      ;; FIXME: In gnu emacs eval-region handles recording which file defines
+      ;; a function or variable. How do we do that in CL?
+
+      (let ( ;;XXX (standard-output t)
+            beg end form)
+        ;; Read the form from the buffer, and record where it ends.
+        (save-excursion
+          (end-of-defun)
+          (beginning-of-defun)
+          (setq beg (point))
+          (setq form (read-from-buffer))
+          (setq end (point)))
+        ;; Alter the form if necessary.  FIXME: we don't macroexpand
+        ;; but really we want to macroexpand down to defvar (and
+        ;; friends) which could be several layers of expansion
+        ;; down. We don't want to go all the way since defvar is
+        ;; itself a macro.
+        (setq form (eval-defun-1 form ;; (macroexpand form)
+                                 ))
+        (eval form)))))
+
+(defcommand eval-defun ((edebug-it)
+                        :prefix)
+  "Evaluate the top-level form containing point, or after point.
+
+If the current defun is actually a call to `defvar' or `defcustom',
+evaluating it this way resets the variable using its initial value
+expression even if the variable already has some other value.
+\(Normally `defvar' and `defcustom' do not alter the value if there
+already is one.)
+
+If `eval-expression-debug-on-error' is non-nil, which is the default,
+this command arranges for all errors to enter the debugger.
+
+With a prefix argument, instrument the code for Edebug.
+
+If acting on a `defun' for FUNCTION, and the function was
+instrumented, `Edebug: FUNCTION' is printed in the minibuffer.  If not
+instrumented, just FUNCTION is printed.
+
+If not acting on a `defun', the result of evaluation is displayed in
+the minibuffer.  This display is controlled by the variables
+`eval-expression-print-length' and `eval-expression-print-level',
+which see."
+  ;; FIXME: edebug?
+  (declare (ignore edebug-it))
+  (cond ;; (edebug-it
+;; 	 (require 'edebug)
+;; 	 (eval-defun (not edebug-all-defs)))
+	(t
+	 (if (null *eval-expression-debug-on-error*)
+	     (eval-defun-2)
+	   (let ((old-value (gensym "t")) new-value value)
+	     (let ((*debug-on-error* old-value))
+	       (setq value (eval-defun-2))
+	       (setq new-value *debug-on-error*))
+	     (unless (eq old-value new-value)
+	       (setq *debug-on-error* new-value))
+	     value)))))
 
 
 (provide :lice-0.1/lisp-mode)
