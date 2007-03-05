@@ -21,7 +21,47 @@ Zero means the entire text matched by the whole regexp or whole string."
 (define-condition search-failed (lice-condition)
   () (:documentation "raised when a search failed to match"))
 
-(defun search-forward (string &key (bound (zv)) (error t) (count 1))
+(defun string-search-command (string bound error count direction)
+  (gap-move-to (current-buffer) (buffer-point-aref (current-buffer)))
+  ;; normalize vars
+  (setf count (* count direction)
+        bound (if (minusp count)
+                  (if bound (max bound (begv)) (begv))
+                  (if bound (min bound (zv)) (zv))))
+  (let* ((buffer (current-buffer))
+	 pos
+         (start-aref (buffer-point-aref buffer))
+         (bound-aref (buffer-char-to-aref buffer bound))
+	 (n (if (minusp count)
+                (loop for i from 0 below (- count)
+                   do (setf pos (search string (buffer-data buffer) :from-end t :end2 start-aref :start2 bound-aref))
+                   while pos
+                   count i)
+                (loop for i from 0 below count
+                   do (setf pos (search string (buffer-data buffer) :start2 start-aref :end2 bound-aref))
+                   while pos
+                   count i))))
+    (if (/= n (abs count))
+        (cond
+	  ((eq error t)
+	   (signal 'search-failed))
+	  ((null error)
+	   nil)
+	  (bound
+	   (goto-char bound buffer)
+	   nil)
+          (t nil))
+        (progn
+          (if (minusp count)
+              (goto-char (+ (buffer-aref-to-char buffer pos) (length string)))
+              (goto-char (buffer-aref-to-char buffer pos)))
+          (make-match-data :obj buffer
+                           :start (buffer-aref-to-char buffer pos)
+                           :end (+ (buffer-aref-to-char buffer pos) (length string))
+                           :reg-starts #()
+                           :reg-ends #())))))
+
+(defun search-forward (string &key bound (error t) (count 1))
   "Search forward from point for string.
 Set point to the end of the occurrence found, and return point.
 An optional second argument bounds the search; it is a buffer position.
@@ -35,32 +75,9 @@ Search case-sensitivity is determined by the value of the variable
 `case-fold-search', which see.
 
 See also the functions `match-beginning', `match-end' and `replace-match'."
-  (gap-move-to (current-buffer) (buffer-point-aref (current-buffer)))
-  (let* ((buffer (current-buffer))
-	 pos
-	 (n (loop for i from 0 below count
-               do (setf pos (search string (buffer-data buffer) :start2 (buffer-point-aref buffer) :end2 bound))
-               while pos
-               count i)))
-    (if (/= n count)
-        (cond
-	  ((eq error t)
-	   (signal 'search-failed))
-	  ((null error)
-	   nil)
-	  (bound
-	   (goto-char bound buffer)
-	   nil)
-          (t nil))
-        (progn
-          (goto-char (+ (buffer-aref-to-char buffer pos) (length string)))
-          (make-match-data :obj buffer
-                           :start (buffer-aref-to-char buffer pos)
-                           :end (point buffer)
-                           :reg-starts #()
-                           :reg-ends #())))))
+  (string-search-command string bound error count 1))
 
-(defun search-backward (string &key (bound (begv)) (error t) (count 1))
+(defun search-backward (string &key bound (error t) (count 1))
   "Search backward from point for STRING.
 Set point to the beginning of the occurrence found, and return point.
 An optional second argument bounds the search; it is a buffer position.
@@ -73,30 +90,7 @@ Search case-sensitivity is determined by the value of the variable
 `case-fold-search', which see.
 
 See also the functions `match-beginning', `match-end' and `replace-match'."
-  (gap-move-to (current-buffer) (buffer-point-aref (current-buffer)))
-  (let* ((buffer (current-buffer))
-	 pos
-	 (n (loop for i from 0 below count
-               do (setf pos (search string (buffer-data buffer) :from-end t :end2 (buffer-point-aref buffer) :start2 bound))
-               while pos
-               count i)))
-    (if (/= n count)
-        (cond
-	  ((eq error t)
-	   (signal 'search-failed))
-	  ((null error)
-	   nil)
-	  (bound
-	   (goto-char bound buffer)
-	   nil)
-          (t nil))
-        (progn
-          (goto-char (buffer-aref-to-char buffer pos))
-          (make-match-data :obj buffer
-                           :start (buffer-aref-to-char buffer pos)
-                           :end (+ (buffer-aref-to-char buffer pos) (length string))
-                           :reg-starts #()
-                           :reg-ends #())))))
+  (string-search-command string bound error count -1))
 
 (defun looking-at (regexp &optional (buffer (current-buffer)))
   "Return the match-data if text after point matches regular expression regexp."

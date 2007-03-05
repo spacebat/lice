@@ -120,7 +120,8 @@ is called as a function to find the defun's end."
                    (skip-whitespace-forward)
                    (if (looking-at ";|\\n") ; XXX: used to be comment starter \\s<
                        (forward-line 1))
-                   (<= (point) pos))))
+                   (<= (point) pos))
+        (message "point: ~d ~d" (point) pos)))
 	(setq arg (1- arg)))
       (while (< arg 0)
 	(let ((pos (point)))
@@ -390,10 +391,11 @@ is called as a function to find the defun's beginning."
                                                          "^\\(|" "")
                                                      "(?:" *defun-prompt-regexp* ")\\(")
                                              :error 'move :count (or arg 1))
-                         (search-backward (format nil "~%(")
+                         (search-backward (format nil "~%(") ;; FIXME: doesn't match beginning of buffer
                                           :error 'move :count (or arg 1))))) ;; used to be ^\\(
           (when mdata
-            (goto-char (1- (match-end mdata 0)))) t))))
+            (goto-char (1- (match-end mdata 0)))
+            t)))))
 
 (defcommand beginning-of-defun ((&optional (arg 1))
                                 :prefix)
