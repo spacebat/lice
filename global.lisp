@@ -105,5 +105,11 @@ before making `inhibit-quit' nil.")
 (defvar *quit-flag* nil
   "Set to T when the user hit the quit key")
   
+;; XXX: get rid of this function and all callers
+(defun assq (key list)
+  "Return non-nil if key is `eq' to the car of an element of list.
+The value is actually the first element of list whose car is key.
+Elements of list that are not conses are ignored."
+  (assoc prop (remove-if 'listp list)))
 
 (provide :lice-0.1/global)

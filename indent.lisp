@@ -193,16 +193,16 @@ column to indent to; if it is nil, use one of the three methods above."
   (message "guuh ~s ~s" column *prefix-arg*)
 
   (if (null column)
-      (if (buffer-local :fill-prefix)
+      (if *fill-prefix*
 	  (save-excursion
 	    (goto-char end)
 	    (setq end (point-marker))
 	    (goto-char start)
-	    (let ((regexp (regexp-quote (buffer-local :fill-prefix))))
+	    (let ((regexp (regexp-quote *fill-prefix*)))
 	      (while (< (point) (marker-position end))
 		(or (looking-at regexp)
 		    (and (bolp) (eolp))
-		    (insert (buffer-local :fill-prefix)))
+		    (insert *fill-prefix*))
 		(forward-line 1))))
           (if *indent-region-function*
               (funcall *indent-region-function* start end)

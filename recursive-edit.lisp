@@ -10,6 +10,8 @@
   (let* ((*recursive-edit-depth* (1+ *recursive-edit-depth*))
 	 ;; reset the command keys for the recursive edit
 	 (*this-command-keys* nil)
+         ;; restore the last command
+         (*last-command* *last-command*)
 	 (ret (catch 'exit
 		(with-lice-debugger
 		    (loop 

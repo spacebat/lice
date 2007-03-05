@@ -56,6 +56,15 @@ operation (by pressing C-g, for instance)."))
 		      (apply #',name ,tmp))))))))
 			     
 
+(defvar *last-point-position-buffer* nil
+  "The buffer that was current when the last command was started.")
+
+(defvar *last-point-position-window* nil
+  "The window that was selected when the last command was started.")
+
+(defvar *last-point-position* nil
+  "The value of point when the last command was started.")
+
 (defvar *last-command* nil
   "The last command executed.")
 
@@ -149,7 +158,11 @@ The value is a list of KEYs."
       )
     (setf *last-command* *this-command*
 	  ;; reset command keys, since the command is over.
-	  *this-command-keys* nil)))
+	  *this-command-keys* nil)
+    ;; handle undo
+    (undo-boundary)
+
+))
 
 ;;; events
 
@@ -419,6 +432,8 @@ more."
     (define-key kmap (make-instance 'key :char #\\ :control t :meta t) 'indent-region)
     (define-key kmap (make-instance 'key :char #\a :control t :meta t) 'beginning-of-defun)
     (define-key kmap (make-instance 'key :char #\e :control t :meta t) 'end-of-defun)
+    (define-key kmap (make-instance 'key :char #\_ :control t) 'undo)
+    (define-key kmap (make-instance 'key :char #\/ :control t) 'undo)
     (define-key kmap (make-instance 'key :char #\x :control t) ctl-x-prefix)
     (define-key kmap (make-instance 'key :char #\c :control t) ctl-c-prefix)
     (define-key kmap (make-instance 'key :char #\h :control t) ctl-h-prefix)

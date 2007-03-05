@@ -1,5 +1,9 @@
 (in-package :lice)
 
+(defvar *inhibit-point-motion-hooks* nil
+  "If non-nil, don't run `point-left' and `point-entered' text properties.
+This also inhibits the use of the `intangible' text property.")
+
 ;; This function is not translated well
 (defun validate-interval-range (object begin end force)
   (let (i searchpos)

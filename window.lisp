@@ -86,9 +86,10 @@ scrolling up (towards the beginning of the buffer)."))
 ;; 	  (window-2d-display window) d)))
 
 (defun make-window (&key x y cols rows buffer frame 
-			 (top (make-marker 0 buffer))
-			 (bpoint (make-marker))
-			 (type 'window))
+                    (top (make-marker))
+                    (bpoint (make-marker))
+                    (bottom (make-marker))
+                    (type 'window))
   "Return a new window. This is handy for setting up all the pesky
 display structures.
 
@@ -104,11 +105,13 @@ TYPE isn't used yet. it's just there for hype."
 			   :point-line 0
 			   :buffer buffer
 			   :top top
-			   :bottom (make-marker 0 buffer)
+			   :bottom bottom
 			   :bpoint bpoint
 			   :point-col 0
 			   :point-line 0)))
     (set-marker bpoint (point buffer) buffer)
+    (set-marker top (begv buffer) buffer)
+    (set-marker bottom (begv buffer) buffer)
     w))
 
 (defun make-test-window (buffer)
@@ -139,6 +142,10 @@ for horizontal splits, is not included in the width."
   "Return the current window in the current frame. If FRAME is
 specified, use that frame instead."
   (frame-current-window frame))
+
+(defun selected-window ()
+  "Return the window that the cursor now appears in and commands apply to."
+  (get-current-window))
 
 (defun set-window-buffer (window buffer &optional keep-margins)
   "Make WINDOW display BUFFER as its contents.
@@ -410,7 +417,7 @@ starting line."
 worth of lines and return T if POINT was in the line cache. otherwise
 don't change anything and return nil."
   (let* ((lines (generate-n-lines-forward (window-buffer window) (window-width window)
-					  (marker-position (window-top window)) 
+					  (marker-position (window-top window))
 					  (window-height window))))
     (add-end-of-buffer (window-buffer window) lines)
     (when (or always-return-lines
@@ -700,8 +707,8 @@ LINES many lines, moving the window point to be visible."
 
 (defun delete-window (&optional (window (selected-window)))
   (check-type window window)
-  (when (or (typep window minibuffer-window)
-	    (typep (frame-window-tree frame) 'window))
+  (when (or (typep window 'minibuffer-window)
+	    (typep (frame-window-tree (window-frame window)) 'window))
     (error "Attempt to delete minibuffer or sole ordinary window")))
 
 (defun pos-visible-in-window-p (&optional (pos (point)) (window (selected-window)) partially)

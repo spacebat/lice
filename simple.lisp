@@ -92,42 +92,41 @@ With positive n, a non-empty line at the end counts as one line
 	((and (< n 0)
 	      (= (point) (begv)))
 	 (signal 'beginning-of-buffer)))
-      (if (> n 0)
-	  (multiple-value-bind (p lines) (buffer-scan-newline (current-buffer) 
-							      (point (current-buffer))
-							      (1- (buffer-size (current-buffer)))
-							      n)
-	    ;; Increment p by one so the point is at the beginning of the
-	    ;; line.
-	    (when (or (char= (char-after p) #\Newline)
-		      (= p (1- (buffer-size (current-buffer)))))
-	      (incf p))
-	    (goto-char p)
-	    (when (zerop lines)
-	      (signal 'end-of-buffer))
-	    (- n lines))
-	(if (and (= n 0)
-		 (not (char-before)))
-	    0
-	  (multiple-value-bind (p lines) 
-	      (buffer-scan-newline (current-buffer) 
-				   (point) 0
-				   ;; A little mess to figure out how
-				   ;; many newlines to search for to
-				   ;; give the proper output.
-				   (if (zerop n)
-				       n
-				     (if (and (char-after (point))
-					      (char= (char-after (point)) #\Newline))
-					 (- n 2)
-				       (1- n))))
-	    (when (char= (char-after p) #\Newline)
-	      (incf p))
-	    (goto-char p)
-	    (when (and (< n 0)
-		     (zerop lines))
-	      (signal 'beginning-of-buffer))	
-    (+ n lines)))))
+  (if (> n 0)
+      (multiple-value-bind (p lines) (buffer-scan-newline (current-buffer) 
+                                                          (point (current-buffer))
+                                                          (1- (buffer-size (current-buffer)))
+                                                          n)
+        ;; Increment p by one so the point is at the beginning of the
+        ;; line.
+        (when (or (char= (char-after p) #\Newline)
+                  (= p (1- (buffer-size (current-buffer)))))
+          (incf p))
+        (goto-char p)
+        (when (zerop lines)
+          (signal 'end-of-buffer))
+        (- n lines))
+      (if (and (= n 0)
+               (not (char-before)))
+          0
+          ;; A little mess to figure out how many newlines to search
+          ;; for to give the proper output.
+          (let ((lines (if (and (char-after (point))
+                                (char= (char-after (point)) #\Newline))
+                           (- n 2)
+                           (1- n))))
+            (multiple-value-bind (p flines) 
+                (buffer-scan-newline (current-buffer) 
+                                     (point) (begv)
+                                     lines)
+              (when (and (char= (char-after p) #\Newline)
+                         (= flines (- lines)))
+                (incf p))
+              (goto-char p)
+              (when (and (< n 0)
+                         (zerop flines))
+                (signal 'beginning-of-buffer))	
+              (+ n flines))))))
 
 (defcommand self-insert-command ((arg)
 				 :prefix)
@@ -187,10 +186,10 @@ With arg N, insert N newlines."
   "Return non-nil if the character after POS is currently invisible."
   (let ((prop
 	 (get-char-property pos 'invisible)))
-    (if (eq (buffer-local :buffer-invisibility-spec) t)
+    (if (eq *buffer-invisibility-spec* t)
 	prop
-      (or (find prop (buffer-local :buffer-invisibility-spec))
-	  (assoc prop (remove-if-not 'listp (buffer-local :buffer-invisibility-spec)))))))
+      (or (find prop *buffer-invisibility-spec*)
+	  (assoc prop (remove-if 'listp *buffer-invisibility-spec*))))))
 
 (defcustom track-eol nil
   "*Non-nil means vertical motion starting at end of line keeps to ends of lines.
@@ -205,7 +204,7 @@ Outline mode sets this."
   :type 'boolean
   :group 'editing-basics)
 
-(defcustom-buffer-local :goal-column nil
+(defcustom-buffer-local *goal-column* nil
   "*Semipermanent goal column for vertical motion, as set by \\[set-goal-column], or nil."
   :type '(choice integer
 		 (const :tag "None" nil))
@@ -281,7 +280,7 @@ The value is t if we can move the specified number of lines."
 			9999
 		      (current-column))))
 
-	  (if (and (not (integerp (buffer-local :selective-display)))
+	  (if (and (not (integerp *selective-display*))
 		   (not *line-move-ignore-invisible*))
 	      ;; Use just newline characters.
 	      ;; Set ARG to 0 if we move as many lines as requested.
@@ -317,7 +316,7 @@ The value is t if we can move the specified number of lines."
 		      (signal 'end-of-buffer)
 		    (setq done t)))
 		 ((and (> arg 1)  ;; Use vertical-motion for last move
-		       (not (integerp (buffer-local :selective-display)))
+		       (not (integerp *selective-display*))
 		       (not (line-move-invisible-p (point))))
 		  ;; We avoid vertical-motion when possible
 		  ;; because that has to fontify.
@@ -339,7 +338,7 @@ The value is t if we can move the specified number of lines."
 		      (signal 'beginning-of-buffer nil)
 		    (setq done t)))
 		 ((and (< arg -1) ;; Use vertical-motion for last move
-		       (not (integerp (buffer-local :selective-display)))
+		       (not (integerp *selective-display*))
 		       (not (line-move-invisible-p (1- (point)))))
 		  (forward-line -1))
 		 ((zerop (vertical-motion -1))
@@ -350,7 +349,7 @@ The value is t if we can move the specified number of lines."
 		  (setq arg (1+ arg))
 		  (while (and ;; Don't move over previous invis lines
 			  ;; if our target is the middle of this line.
-			  (or (zerop (or (buffer-local :goal-column) *temporary-goal-column*))
+			  (or (zerop (or *goal-column* *temporary-goal-column*))
 			      (< arg 0))
 			  (not (bobp)) (line-move-invisible-p (1- (point))))
 		    (goto-char (previous-char-property-change (point))))))))
@@ -366,7 +365,7 @@ The value is t if we can move the specified number of lines."
 	     ;; at least go to beginning of line.
 	     (beginning-of-line))
 	    (t
-	     (line-move-finish (or (buffer-local :goal-column) *temporary-goal-column*)
+	     (line-move-finish (or *goal-column* *temporary-goal-column*)
 			       opoint forward))))))
 
 (defun line-move-finish (column opoint forward)
@@ -531,20 +530,22 @@ To ignore intangibility, bind `inhibit-point-motion-hooks' to t."
   (declare (ignore n))
   (setf (marker-position (buffer-point (current-buffer))) (buffer-end-of-line)))
 
-(defcommand erase-buffer ((&optional buffer))
+(defcommand erase-buffer ((&optional (buffer (current-buffer))))
   "Erase the contents of the current buffer."
-  (buffer-erase (or buffer (current-buffer))))
+  (buffer-erase buffer))
 
 (defcommand execute-extended-command ((prefix)
 				      :raw-prefix)
   "Read a user command from the minibuffer."
-  (let ((cmd (read-command  (case (prefix-numeric-value prefix)
-				       (1 "M-x ")
-				       (4 "C-u M-x ")
-				       (t (format nil "~a M-x " prefix))))))
-    (if (lookup-command cmd)
+  (let* ((name (read-command  (case (prefix-numeric-value prefix)
+                                (1 "M-x ")
+                                (4 "C-u M-x ")
+                                (t (format nil "~a M-x " prefix)))))
+         (cmd (lookup-command name)))
+    (if cmd
 	(progn
-	  (dispatch-command cmd))
+	  (dispatch-command name)
+          (setf *this-command* (command-name cmd)))
       (message "No Match"))))
 
 (defcommand switch-to-buffer ((buffer &optional norecord)
@@ -632,6 +633,10 @@ with SIGHUP."
     (goto-char (marker-position (mark-marker)))
     (set-marker (mark-marker) p)))
 
+;; FIXME: this variable is here just so code compiles. we still need
+;; to implement it.
+(defvar transient-mark-mode nil)
+
 (defcommand set-mark-command ()
   (set-marker (mark-marker) (point))
   (message "Mark set"))
@@ -655,15 +660,19 @@ In Transient Mark mode, this does not activate the mark."
 ;; (defun kill-ring-save (beg end)
 ;;   "Save the region to the kill ring."
 
-(defcommand scroll-up ()
+(defcommand scroll-up ((&optional arg)
+                       :raw-prefix)
   (let ((win (get-current-window)))
-    (window-scroll-up win (max 1 (- (window-height win)
-				    *next-screen-context-lines*)))))
+    (window-scroll-up win (max 1 (or (and arg (prefix-numeric-value arg))
+                                     (- (window-height win)
+                                        *next-screen-context-lines*))))))
 
-(defcommand scroll-down ()
+(defcommand scroll-down ((&optional arg)
+                         :raw-prefix)
   (let ((win (get-current-window)))
-    (window-scroll-down win (max 1 (- (window-height win)
-				      *next-screen-context-lines*)))))
+    (window-scroll-down win (max 1 (or (and arg (prefix-numeric-value arg))
+                                       (- (window-height win)
+                                          *next-screen-context-lines*))))))
 
 (defcommand end-of-buffer ()
   "Move point to the end of the buffer; leave mark at previous position.
@@ -1077,12 +1086,10 @@ With argument 0, interchanges line point is in with line mark is in."
 
 ;;; 
 
-(defcustom-buffer-local :fill-prefix nil
+(defcustom-buffer-local *fill-prefix* nil
   "*String for filling to insert at front of new line, or nil for none."
   :type '(choice (const :tag "None" nil)
 		 string)
   :group 'fill)
-
-
 
 (provide :lice-0.1/simple)

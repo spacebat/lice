@@ -169,7 +169,7 @@ buffer is the buffer (or buffer name) to associate with the process.
 program is the program file name.  It is searched for in PATH.
 Remaining arguments are strings to give program as arguments."
   (let* ((buf (and buffer (get-buffer-create buffer)))
-	 (mark (and buf (make-marker (point buf) buf))))
+	 (mark (and buf (copy-marker (point-marker buf)))))
     (multiple-value-bind (proc input output error) (run-program program program-args)
       (make-instance 'buffer-subprocess
 		     :internal-process proc

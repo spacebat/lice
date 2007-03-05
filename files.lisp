@@ -61,7 +61,7 @@
 (defcommand save-buffer ()
   (let ((buffer (current-buffer)))
     (when (buffer-file buffer)
-      (if (buffer-modified buffer)
+      (if (buffer-modified-p buffer)
 	  (with-open-file (out (buffer-file buffer)
 			       :direction :output
 			       :if-exists :overwrite
@@ -74,7 +74,7 @@
 	    (write-sequence (buffer-data buffer) out 
 			    :start (gap-end buffer)
 			    :end (length (buffer-data buffer)))
-	    (setf (buffer-modified buffer) nil)
+	    (setf (buffer-modified-p buffer) nil)
 	    (message "Wrote ~a~%" (buffer-file (current-buffer))))
 	(message "(No changes need to be saved)")))))
 
@@ -94,5 +94,46 @@
                        (:file "Load file: "))
   "Load the Lisp file named FILE."
   (load file))
+
+;;; auto save
+
+(defun recent-auto-save-p ()
+  "Return t if current buffer has been auto-saved recently.
+More precisely, if it has been auto-saved since last read from or saved
+in the visited file.  If the buffer has no visited file,
+then any auto-save counts as \"recent\"."
+  ;; FIXME: implement
+  nil)
+
+(defun set-buffer-auto-saved ()
+"Mark current buffer as auto-saved with its current text.
+No auto-save file will be written until the buffer changes again."
+  (setf (buffer-auto-save-modified (current-buffer)) (buffer-modiff (current-buffer))))
+
+;; FIXME: maybe this should be a slot in the buffer with the rest of the autosave slots
+(define-buffer-local buffer-auto-save-file-name nil
+  "Name of file for auto-saving current buffer.
+If it is nil, that means don't auto-save this buffer.")
+
+(defcustom *delete-auto-save-files* t
+  "Non-nil means delete auto-save file when a buffer is saved or killed.
+
+Note that the auto-save file will not be deleted if the buffer is killed
+when it has unsaved changes."
+  :type 'boolean
+  :group 'auto-save)
+
+(defun delete-auto-save-file-if-necessary (&optional force)
+  "Delete auto-save file for current buffer if `delete-auto-save-files' is t.
+Normally delete only if the file was written by this Emacs since
+the last real save, but optional arg FORCE non-nil means delete anyway."
+  (and buffer-auto-save-file-name *delete-auto-save-files*
+       (not (string= (buffer-file (current-buffer)) buffer-auto-save-file-name))
+       (or force (recent-auto-save-p))
+       (progn
+	 (handler-case
+	     (delete-file buffer-auto-save-file-name)
+	   (file-error () nil))
+	 (set-buffer-auto-saved))))
 
 (provide :lice-0.1/files)

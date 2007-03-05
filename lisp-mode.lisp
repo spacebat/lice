@@ -385,12 +385,13 @@ is called as a function to find the defun's beginning."
         (when (and (< arg 0) 
                    (not (eobp)))
           (forward-char 1))
-        (let ((mdata (re-search-backward (if *defun-prompt-regexp*
-                                             (concat (if *open-paren-in-column-0-is-defun-start*
+        (let ((mdata (if *defun-prompt-regexp*
+                         (re-search-backward (concat (if *open-paren-in-column-0-is-defun-start*
                                                          "^\\(|" "")
                                                      "(?:" *defun-prompt-regexp* ")\\(")
-                                             "\\n\\(") ;; used to be ^\\(
-                                         :error 'move :count (or arg 1))))
+                                             :error 'move :count (or arg 1))
+                         (search-backward (format nil "~%(")
+                                          :error 'move :count (or arg 1))))) ;; used to be ^\\(
           (when mdata
             (goto-char (1- (match-end mdata 0)))) t))))
 

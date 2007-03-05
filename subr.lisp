@@ -140,7 +140,7 @@ provides a file dialog box.
 See also `read-file-name-completion-ignore-case'
 and `read-file-name-function'."
   (declare (ignore predicate initial mustmatch default-filename dir))
-  (completing-read prompt #'file-completions :initial-input (princ-to-string (buffer-local :default-directory))))
+  (completing-read prompt #'file-completions :initial-input (princ-to-string *default-directory*)))
 
 (defun read-string (prompt &optional initial-input history default-value)
   "Read a string from the minibuffer, prompting with string prompt.

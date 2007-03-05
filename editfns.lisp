@@ -418,4 +418,7 @@ This function does not move point."
               (point))))
     (constrain-to-field pt (point) (not (eql n 1)) t nil)))
 
+(defun clip-to-bounds (lower num upper)
+  (max (min num upper) lower))
+
 (provide :lice-0.1/editfns)

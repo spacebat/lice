@@ -16,6 +16,13 @@ returns the current frames's current window's buffer.
 This variable should never be set using `setq' or `setf'. Bind it with
 `let' for as long as it needs to be set.")
 
+(defvar *inhibit-read-only* nil
+"*Non-nil means disregard read-only status of buffers or characters.
+If the value is t, disregard `buffer-read-only' and all `read-only'
+text properties.  If the value is a list, disregard `buffer-read-only'
+and disregard a `read-only' text property if the property value
+is a member of the list.")
+
 (defclass pstring ()
   ((data :type string :initarg :data :accessor pstring-data)
    (intervals :type (or null interval) :initform nil :initarg :intervals :accessor intervals))
@@ -36,7 +43,7 @@ This variable should never be set using `setq' or `setf'. Bind it with
    ;; mode-line
    (mode-line :type list :initarg :mode-line :initform nil :accessor buffer-mode-line)
    (mode-line-string :type string :initform "" :accessor buffer-mode-line-string)
-   (modified :type boolean :initform nil :accessor buffer-modified)
+   (modified :type boolean :initform nil :accessor buffer-modified-p)
    (read-only :type boolean :initform nil :accessor buffer-read-only)
    (tick :type integer :initform 0 :accessor buffer-modified-tick :documentation
 	 "The buffer's tick counter. It is incremented for each change
@@ -51,6 +58,24 @@ is displayed in a window.")
    (locals :type hash-table :initform (make-hash-table) :accessor buffer-locals))
   (:documentation "A Buffer."))
 
+;; undo structures used to record types of undo information. This is
+;; an alternative to the cons cells gnu emacs uses which I find
+;; obscure.
+(defstruct undo-entry-insertion
+  beg end)
+(defstruct undo-entry-delete
+  text position)
+(defstruct undo-entry-modified
+  time)
+(defstruct undo-entry-property
+  prop value beg end)
+(defstruct undo-entry-apply
+  function args)
+(defstruct undo-entry-selective
+  delta beg end function args)
+(defstruct undo-entry-marker
+  marker distance)
+
 (defclass buffer (base-buffer)
   ((point :type marker :initarg :point :accessor buffer-point)
    (mark :type marker :initarg :mark :accessor buffer-mark-marker)
@@ -60,7 +85,50 @@ is displayed in a window.")
    (gap-start :type integer :initarg :gap-start :accessor buffer-gap-start)
    (gap-size :type integer :initarg :gap-size :accessor buffer-gap-size)
    (markers :type list :initform '() :accessor buffer-markers)
-   (syntax-table :initform *standard-syntax-table* :accessor buffer-syntax-table))
+   (auto-save-modified :type integer :initform 0 :accessor buffer-auto-save-modified)
+   (modiff :type integer :initform 0 :accessor buffer-modiff)
+   (syntax-table :initform *standard-syntax-table* :accessor buffer-syntax-table)
+   (undo-list :initform '() :accessor buffer-undo-list
+              :documentation "List of undo entries in current buffer.
+Recent changes come first; older changes follow newer.
+
+An entry (BEG . END) represents an insertion which begins at
+position BEG and ends at position END.
+
+An entry (TEXT . POSITION) represents the deletion of the string TEXT
+from (abs POSITION).  If POSITION is positive, point was at the front
+of the text being deleted; if negative, point was at the end.
+
+An entry (t HIGH . LOW) indicates that the buffer previously had
+\"unmodified\" status.  HIGH and LOW are the high and low 16-bit portions
+of the visited file's modification time, as of that time.  If the
+modification time of the most recent save is different, this entry is
+obsolete.
+
+An entry (nil PROPERTY VALUE BEG . END) indicates that a text property
+was modified between BEG and END.  PROPERTY is the property name,
+and VALUE is the old value.
+
+An entry (apply FUN-NAME . ARGS) means undo the change with
+\(apply FUN-NAME ARGS).
+
+An entry (apply DELTA BEG END FUN-NAME . ARGS) supports selective undo
+in the active region.  BEG and END is the range affected by this entry
+and DELTA is the number of bytes added or deleted in that range by
+this change.
+
+An entry (MARKER . DISTANCE) indicates that the marker MARKER
+was adjusted in position by the offset DISTANCE (an integer).
+
+An entry of the form POSITION indicates that point was at the buffer
+location given by the integer.  Undoing an entry of this form places
+point at POSITION.
+
+nil marks undo boundaries.  The undo command treats the changes
+between two undo boundaries as a single step to be undone.
+
+If the value of the variable is t, undo information is not recorded.
+"))
   (:documentation "A text Buffer."))
 
 (defmethod print-object ((obj buffer) stream)
@@ -115,7 +183,12 @@ If you set the marker not to point anywhere, the buffer will have no mark."
 buffer. Use them when building minor and major modes. You
 generally want to define them with this so you can create a
 docstring for them. there is also `make-buffer-local'."
-  `(make-buffer-local ,symbol ,default-value ,doc-string))
+  `(progn
+     (when (boundp ',symbol)
+       (warn "Symbol ~s is already bound. Existing uses of symbol will not be buffer local." ',symbol)
+       (makunbound ',symbol))
+     (define-symbol-macro ,symbol (buffer-local ',symbol))
+     (make-buffer-local ',symbol ,default-value ,doc-string)))
 
 (defun (setf buffer-local) (symbol value)
   "Set the value of the buffer local in the current buffer."
@@ -126,15 +199,16 @@ docstring for them. there is also `make-buffer-local'."
 (defun buffer-local (symbol)
   "Return the value of the buffer local symbol. If none exists
 for the current buffer then use the global one. If that doesn't
-exist, return nil."
+exist, throw an error."
   (multiple-value-bind (v b) (gethash symbol (buffer-locals *current-buffer*))
     (if b
 	v
 	(multiple-value-bind (v b) (gethash symbol *global-buffer-locals*)
-	  (when b
-	    (buffer-local-binding-value v))))))
+	  (if b
+              (buffer-local-binding-value v)
+              (error "No binding for buffer-local ~s" symbol))))))
 
-(define-buffer-local :buffer-invisibility-spec nil
+(define-buffer-local *buffer-invisibility-spec* nil
   "Invisibility spec of this buffer.
 The default is t, which means that text is invisible
 if it has a non-nil `invisible' property.
@@ -144,7 +218,7 @@ If an element is a cons cell of the form (PROP . ELLIPSIS),
 then characters with property value PROP are invisible,
 and they have an ellipsis as well if ELLIPSIS is non-nil.")
 
-(define-buffer-local :selective-display nil
+(define-buffer-local *selective-display* nil
   "Non-nil enables selective display.
 An Integer N as value means display only lines
 that start with less than n columns of space.
@@ -161,9 +235,12 @@ in a file, save the ^M as a newline.")
 
 ;;; Markers
 
+(deftype marker-insertion-type () '(member :before :after))
+
 (defclass marker ()
   ((position :type integer :initform 0 :accessor marker-position)
-   (buffer :type (or buffer null) :initform nil :accessor marker-buffer))
+   (buffer :type (or buffer null) :initform nil :accessor marker-buffer)
+   (insertion-type :type marker-insertion-type :initform :after :accessor marker-insertion-type))
   (:documentation "A Marker"))
 
 (defmethod print-object ((obj marker) stream)
@@ -179,26 +256,25 @@ in a file, save the ^M as a newline.")
 (defmethod ensure-number ((thing marker))
   (marker-position thing))
 
-(defun copy-marker (marker &optional type)
+(defun copy-marker (marker &optional (type :after))
   "Return a new marker pointing at the same place as MARKER.
 If argument is a number, makes a new marker pointing
 at that position in the current buffer.
 **The optional argument TYPE specifies the insertion type of the new marker;
 **see `marker-insertion-type'."
-  (declare (ignore type))
-  (make-marker (if (numberp marker)
-                   marker
-                   (marker-position marker))
-               (if (typep marker 'marker)
-                   (marker-buffer marker)
-                   (current-buffer))))
+  (check-type marker (or marker integer))
+  (check-type type marker-insertion-type)
+  (let ((new (make-marker)))
+    (set-marker new (ensure-number marker)
+                (if (typep marker 'marker)
+                    (marker-buffer marker)
+                    (current-buffer)))
+    (setf (marker-insertion-type new) type)
+    new))
 
-(defun make-marker (&optional position buffer)
+(defun make-marker ()
   "Return a newly allocated marker which does not point anywhere."
-  (let ((m (make-instance 'marker)))
-    (when (and position buffer)
-      (set-marker m position buffer))
-    m))
+  (make-instance 'marker))
 
 (defun unchain-marker (marker)
   (when (marker-buffer marker)
@@ -226,6 +302,7 @@ at that position in the current buffer.
   marker)
 
 (defun update-markers-del (buffer start size)
+  ;; FIXME: insertion-type
   ;; First get rid of stale markers
   (purge-markers buffer)
   (dolist (wp (buffer-markers buffer))
@@ -240,6 +317,7 @@ at that position in the current buffer.
 	       (setf (marker-position m) start)))))))
 
 (defun update-markers-ins (buffer start size)
+  ;; FIXME: insertion-type
   ;; First get rid of stale markers
   (purge-markers buffer)
   (dolist (wp (buffer-markers buffer))
@@ -523,7 +601,7 @@ before an intangible character, move to an ok place."
 (defmethod buffer-insert :after ((buf buffer) object)
   "Any object insertion modifies the buffer."
   (declare (ignore object))
-  (setf (buffer-modified buf) t))
+  (setf (buffer-modified-p buf) t))
 
 (defmethod buffer-insert ((buf buffer) (char character))
   "Insert a single character into buffer before point."
@@ -534,6 +612,8 @@ before an intangible character, move to an ok place."
   (unless (= (point buf) (buffer-gap-start buf))
     (gap-move-to buf (buffer-point-aref buf)))
   (update-markers-ins buf (point buf) 1)
+  ;; undo
+  (record-insert (point buf) 1 buf)
   ;; set the character
   (setf (aref (buffer-data buf) (buffer-gap-start buf)) char)
   ;; move the gap forward
@@ -550,6 +630,8 @@ before an intangible character, move to an ok place."
   (unless (= (point buf) (buffer-gap-start buf))
     (gap-move-to buf (buffer-point-aref buf)))
   (update-markers-ins buf (point buf) (length string))
+  ;; undo
+  (record-insert (point buf) (length string) buf)
   ;; insert chars
   (replace (buffer-data buf) string :start1 (buffer-gap-start buf))
   (incf (buffer-gap-start buf) (length string))
@@ -598,6 +680,7 @@ before the text."
 	 (let* ((new (max 0 (+ (buffer-gap-start buf) length)))
 		(capped-size (- (buffer-gap-start buf) new)))
 	   (update-markers-del buf new capped-size)
+           (record-delete new (buffer-substring new (+ new capped-size)))
            (adjust-intervals-for-deletion buf new capped-size)
 	   (incf (buffer-gap-size buf) capped-size)
 	   (setf (buffer-gap-start buf) new)))
@@ -609,22 +692,24 @@ before the text."
 	    (let ((capped-size (- (min (+ (gap-end buf) length)
 				       (length (buffer-data buf)))
 				  (gap-end buf))))
+              (record-delete p (buffer-substring p (+ p capped-size)))
 	      (incf (buffer-gap-size buf) capped-size)
 	      (update-markers-del buf p capped-size)
               (adjust-intervals-for-deletion buf p capped-size)))))
-  (setf (buffer-modified buf) t)
+  (setf (buffer-modified-p buf) t)
   ;; debuggning
   (fill-gap buf))
 
 (defun buffer-erase (&optional (buf (current-buffer)))
   ;; update properties
+  (record-delete (begv buf) (buffer-substring (begv buf) (zv buf) buf) buf)
   (adjust-intervals-for-deletion buf 0 (buffer-size buf))
   (update-markers-del buf 0 (buffer-size buf))
   ;; expand the gap to take up the whole buffer
   (setf (buffer-gap-start buf) 0
 	(buffer-gap-size buf) (length (buffer-data buf))
 	(marker-position (buffer-point buf)) 0
-	(buffer-modified buf) t)
+	(buffer-modified-p buf) t)
   ;; debugging
   (fill-gap buf))
 
@@ -753,9 +838,9 @@ number of newlines found. START and LIMIT are inclusive."
 				       (lambda (buffer)
 					 (format nil "~C~C"
 					      ;; FIXME: add read-only stuff
-					      (if (buffer-modified buffer)
+					      (if (buffer-modified-p buffer)
 						  #\* #\-)
-					      (if (buffer-modified buffer)
+					      (if (buffer-modified-p buffer)
 						  #\* #\-)))
 				       "  "
 				       (lambda (buffer)
@@ -843,18 +928,17 @@ The value is never nil."))
 
 ;;; 
 
+(defparameter *initial-scratch-message* ";; This buffer is for notes you don't want to save, and for Lisp evaluation.
+;; If you want to create a file, visit that file with C-x C-f,
+;; then enter the text in that file's own buffer.")
+
 (defun make-default-buffers ()
   "Called on startup. Create the default buffers, putting them in
 *buffer-list*."
   ;; for the side effect
-  (get-buffer-create "*messages*")
-  (let ((scratch (get-buffer-create "*scratch*")))
-    (buffer-insert scratch ";; This buffer is for notes you don't want to save, and for Lisp evaluation.
-;; If you want to create a file, visit that file with C-x C-f,
-;; then enter the text in that file's own buffer.")
-    ;; FIXME: is this a hack?
-    (setf (buffer-modified scratch) nil)
-    (goto-char (point-min scratch) scratch)))
+  (let ((msg (get-buffer-create "*messages*")))
+    (setf (buffer-undo-list msg) t))
+  (get-buffer-create "*scratch*"))
 
 ;;;
 
@@ -932,6 +1016,9 @@ If BUFFER is omitted or nil, some interesting buffer is returned."
         vis
 	(get-buffer-create "*scratch*"))))
 
+(define-buffer-local *mark-active* nil
+  "Non-nil means the mark and region are currently active in this buffer.")
+
 (defun mark (&optional force (buffer (current-buffer)))
   "Return BUFFER's mark value as integer; error if mark inactive.
 If optional argument FORCE is non-nil, access the mark value
@@ -1005,7 +1092,7 @@ means that other_buffer is more likely to choose a relevant buffer."
   "Return t if object is an editor buffer."
   (typep object 'buffer))
 
-(define-buffer-local :default-directory (truename "")
+(define-buffer-local *default-directory* (truename "")
   "Name of default directory of current buffer.
 To interactively change the default directory, use command `cd'.")
 
