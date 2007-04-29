@@ -16,7 +16,7 @@
 		(with-lice-debugger
 		    (loop 
 		       (frame-render (selected-frame))
-		       (next-event))))))
+		       (top-level-next-event))))))
     ;; return the ret val.
     (dformat +debug-v+ "ret ~a~%" ret)
     (when ret

@@ -21,7 +21,7 @@
         (setf (buffer-modified-p (current-buffer)) nil
               (buffer-undo-list (current-buffer)) nil)
         (goto-char (point-min))
-	(set-major-mode lisp-interaction-mode)
+	(set-major-mode *lisp-interaction-mode*)
 	(init-command-arg-types)
 	(setf *frame-list* (list #+(or cmu sbcl) (make-default-tty-frame (get-buffer "*scratch*"))
 				 #+clisp (make-default-clisp-frame (get-buffer "*scratch*"))

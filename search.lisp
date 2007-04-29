@@ -17,6 +17,17 @@ Zero means the entire text matched by the whole regexp or whole string."
       (match-data-end data)
       (aref (match-data-reg-ends data) (1- idx))))
 
+(defun match-beginning (data idx)
+  "Return position of start of text matched by last search.
+SUBEXP, a number, specifies which parenthesized expression in the last
+  regexp.
+Value is nil if SUBEXPth pair didn't match, or there were less than
+  SUBEXP pairs.
+Zero means the entire text matched by the whole regexp or whole string."
+  (if (zerop idx)
+      (match-data-start data)
+      (aref (match-data-reg-starts data) (1- idx))))
+
 ;; FIXME: needs a formatter and the search string
 (define-condition search-failed (lice-condition)
   () (:documentation "raised when a search failed to match"))
@@ -165,7 +176,7 @@ COUNT is repeat count--search for successive occurrences.
 See also the functions `match-beginning', `match-end', `match-string',
 and `replace-match'."
   (declare (ignore count))
-  (message "re-search-backward ~s ~d" regexp (point))
+  ;;(message "re-search-backward ~s ~d" regexp (point))
   (when (> (buffer-gap-start buffer)
            (buffer-char-to-aref buffer (point buffer)))
     (gap-move-to buffer (buffer-char-to-aref buffer (1+ (point buffer)))))

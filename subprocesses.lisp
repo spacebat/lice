@@ -197,7 +197,9 @@ buffer is the buffer (or buffer name) to associate with the process.
 host is name of the host to connect to, or its IP address.
 service is name of the service desired, or an integer specifying
  a port number to connect to."
+  (declare (ignore name buffer host service))
   ;; TODO: implement
+  (error "unimplemented")
   )
   
 (defvar *shell-file-name* (getenv "SHELL")

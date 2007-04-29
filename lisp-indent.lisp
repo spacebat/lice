@@ -166,6 +166,7 @@ If nil, indent backquoted lists as data, i.e., like quoted lists."
 		  (forward-sexp 1)
 		  (setq function (string-upcase (buffer-substring-no-properties
 						   tem (point))))
+                  (message "name is ~a" function)
 		  (goto-char tem)
 		  (setq tem (intern-soft function)
 			method (get tem 'common-lisp-indent-function))
@@ -453,6 +454,7 @@ If nil, indent backquoted lists as data, i.e., like quoted lists."
 
 (defun lisp-indent-function-lambda-hack (path state indent-point
                                          sexp-column normal-indent)
+  (declare (ignore state indent-point))
   ;; indent (function (lambda () <newline> <body-forms>)) kludgily.
   (if (or (cdr path) ; wtf?
           (> (car path) 3))

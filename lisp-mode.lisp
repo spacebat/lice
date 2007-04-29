@@ -55,17 +55,18 @@ See function `beginning-of-defun'."
     (modify-syntax-entry #\| :string :flags '(:comment-start-second :comment-end-first :comment-style :comment-nested) :table table)
     table))
 
-(define-major-mode lisp-interaction-mode
-  (:name "Lisp Interaction"
-   :map (let ((m (make-sparse-keymap)))
-	  (define-key m (make-instance 'key :char #\j :control t) 'eval-print-last-sexp)
-	  (define-key m (make-instance 'key :char #\Tab) 'lisp-indent-line)
-	  (define-key m (make-instance 'key :char #\i :control t) 'lisp-indent-line)
-          (define-key m (make-instance 'key :char #\q :control t :meta t) 'indent-sexp)
-          (define-key m (make-instance 'key :char #\x :control t :meta t) 'eval-defun)
-	  m))
-  "Lisp mode"
-  (set-syntax-table *lisp-mode-syntax-table*))
+(defvar *lisp-interaction-mode*
+  (make-instance 'major-mode
+                 :name "Lisp Interaction"
+                 :map (let ((m (make-sparse-keymap)))
+                        (define-key m (make-key :char #\j :control t) 'eval-print-last-sexp)
+                        (define-key m (make-key :char #\Tab) 'lisp-indent-line)
+                        (define-key m (make-key :char #\i :control t) 'lisp-indent-line)
+                        (define-key m (make-key :char #\q :control t :meta t) 'indent-sexp)
+                        (define-key m (make-key :char #\x :control t :meta t) 'eval-defun)
+                        m)
+                 :syntax-table *lisp-mode-syntax-table*)
+  "Lisp mode.")
 
 (defun buffer-end (arg)
   "Return the \"far end\" position of the buffer, in direction ARG.
@@ -197,7 +198,7 @@ Negative arg -N means move forward across N groups of parentheses."
       (error (c) (message "Eval error: ~a" c)))))
 
 (defcommand lisp-interaction-mode ()
-  (set-major-mode lisp-interaction-mode))
+  (set-major-mode *lisp-interaction-mode*))
 
 (defvar *lisp-indent-offset* nil
   "If non-nil, indent second line of expressions that many more columns.")

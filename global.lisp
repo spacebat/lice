@@ -7,14 +7,11 @@
 (defparameter *debug-level* +debug-v+)
 ;;(defparameter *debug-level* +debug-vvv+)
 
-(defmacro dformat (lvl &rest fmt-args)
-  (declare (ignore lvl fmt-args))
-;;   (let ((f (gensym)))
-;;     `(when (>= *debug-level* ,lvl)
-;;        (with-open-file (,f #p"/tmp/debug" :direction :output :if-exists :append
-;; 			   :if-does-not-exist :create)
-;;          (format ,f ,@fmt-args))))
-  )
+(defun dformat (lvl &rest fmt-args)
+  (when (>= *debug-level* lvl)
+    (with-open-file (f #p"/tmp/debug" :direction :output :if-exists :append
+                        :if-does-not-exist :create)
+      (apply 'format f fmt-args))))
 
 (defmacro verbose-body (&body body)
   "Print each sexpr in BODY and its return value."
@@ -106,10 +103,104 @@ before making `inhibit-quit' nil.")
   "Set to T when the user hit the quit key")
   
 ;; XXX: get rid of this function and all callers
-(defun assq (key list)
+(defun assq (prop list)
   "Return non-nil if key is `eq' to the car of an element of list.
 The value is actually the first element of list whose car is key.
 Elements of list that are not conses are ignored."
   (assoc prop (remove-if 'listp list)))
+
+(defmacro depricate (symbol refer-to)
+  "A macro to mark a symbol as depricated. This is done with
+function in emacs whose purpose is better done another
+way. For example, a set- function replaced by a setf function. "
+  `(setf (get (quote ,symbol) :depricated) (quote ,refer-to)))
+
+(defun read-string-with-escapes (stream close)
+  "read in a string and handle \\f \\n \\r \\t \\v escape characters."
+  (with-output-to-string (out)
+    (do ((char (read-char stream nil :eof) (read-char stream nil :eof)))
+        ((or (eq char :eof) (char= char close))
+         (if (eq char :eof)
+             (error 'end-of-file :stream stream)))
+      (when (char= char #\\)
+        (setq char (read-char stream nil :eof))
+        (case char
+          (:eof (error 'end-of-file :stream stream))
+          (#\f (setq char #\Page))
+          (#\n (setq char #\Newline))
+          (#\r (setq char #\Return))
+          (#\t (setq char #\Tab))
+          (#\v (setq char #\Vt))))
+        (write-char char out))))
+
+;; LiCE handles a few escape codes like GNU Emacs
+(set-macro-character #\" #'read-string-with-escapes)
+
+(defun run-hooks (&rest hooks)
+  "Run each hook in HOOKS.
+Each argument should be a symbol, a hook variable.
+These symbols are processed in the order specified.
+If a hook symbol has a non-nil value, that value may be a function
+or a list of functions to be called to run the hook.
+If the value is a function, it is called with no arguments.
+If it is a list, the elements are called, in order, with no arguments.
+
+Major modes should not use this function directly to run their mode
+hook; they should use `run-mode-hooks' instead.
+
+Do not use `make-local-variable' to make a hook variable buffer-local.
+Instead, use `add-hook' and specify t for the LOCAL argument."
+  (mapc (lambda (h)
+          (when (symbolp h)
+            (setf h (symbol-value h)))
+          (mapc 'funcall h))
+        hooks))
+
+(defun add-hook (hook function &optional append local)
+  "Add to the value of HOOK the function function.
+FUNCTION is not added if already present.
+FUNCTION is added (if necessary) at the beginning of the hook list
+unless the optional argument append is non-nil, in which case
+function is added at the end.
+
+The optional fourth argument, LOCAL, if non-nil, says to modify
+the hook's buffer-local value rather than its default value.
+This makes the hook buffer-local if needed, and it makes t a member
+of the buffer-local value.  That acts as a flag to run the hook
+functions in the default value as well as in the local value.
+
+HOOK should be a symbol, and FUNCTION may be any valid function.  If
+HOOK is void, it is first set to nil.  If HOOK's value is a single
+function, it is changed to a list of functions."
+  (declare (ignore append local))
+  (pushnew function (symbol-value hook)))
+
+(defun remove-hook (hook function &optional local)
+  "Remove from the value of HOOK the function FUNCTION.
+HOOK should be a symbol, and FUNCTION may be any valid function.  If
+FUNCTION isn't the value of HOOK, or, if FUNCTION doesn't appear in the
+list of hooks to run in HOOK, then nothing is done.  See `add-hook'.
+
+The optional third argument, LOCAL, if non-nil, says to modify
+the hook's buffer-local value rather than its default value."
+  (declare (ignore local))
+  (setf (symbol-value hook) (remove function (symbol-value hook))))
+
+(depricate substring subseq)
+(defun substring (string from &optional (to (length string)))
+  "Return a substring of string, starting at index from and ending before to.
+to may be nil or omitted; then the substring runs to the end of string.
+from and to start at 0.  If either is negative, it counts from the end.
+
+This function allows vectors as well as strings."
+  (subseq string from to))
+
+(depricate memq member)
+(defun memq (elt list)
+  "Return non-nil if ELT is an element of LIST.
+Comparison done with `eq'.  The value is actually the tail of LIST
+whose car is ELT."
+  (member elt list :test 'eq))
+
 
 (provide :lice-0.1/global)

@@ -727,6 +727,7 @@ of the window.  The remaining elements are omitted if the character after
 POS is fully visible; otherwise, RTOP and RBOT are the number of pixels
 off-window at the top and bottom of the row, ROWH is the height of the
 display row, and VPOS is the row number (0-based) containing POS."
+  (declare (ignore partially))
   (check-type pos number)
   (check-type window window)
   ;; FIXME: horizontal scrolling. and all the partial stuff aint there

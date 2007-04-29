@@ -223,6 +223,7 @@ That is not really a clean thing to do, since it mixes
 scrolling with cursor motion.  But so far we don't have
 a cleaner solution to the problem of making C-n do something
 useful given a tall image."
+  (declare (ignore try-vscroll))
   ;; XXX: Fuckit the vertical scrolling for now
 ;;   (if (and auto-window-vscroll try-vscroll
 ;; 	   ;; But don't vscroll in a keyboard macro.
@@ -266,6 +267,7 @@ Arg says how many lines to move.
 The value is t if we can move the specified number of lines."
   ;; Don't run any point-motion hooks, and disregard intangibility,
   ;; for intermediate positions.
+  (declare (ignore to-end))
   (let ((*inhibit-point-motion-hooks* t)
 	(opoint (point))
 	(forward (> arg 0)))
@@ -401,7 +403,7 @@ The value is t if we can move the specified number of lines."
 	;; unnecessarily.  Note that we move *forward* past intangible
 	;; text when the initial and final points are the same.
 	(goto-char new)
-	(let ((inhibit-point-motion-hooks nil))
+	(let ((*inhibit-point-motion-hooks* nil))
 	  (goto-char new)
 
 	  ;; If intangibility moves us to a different (later) place
@@ -427,7 +429,7 @@ The value is t if we can move the specified number of lines."
 	;; Now move to the updated destination, processing fields
 	;; as well as intangibility.
 	(goto-char opoint)
-	(let ((inhibit-point-motion-hooks nil))
+	(let ((*inhibit-point-motion-hooks* nil))
 	  (goto-char
 	   (constrain-to-field new opoint nil t
 			       'inhibit-line-move-field-capture)))
@@ -652,6 +654,7 @@ Novice Emacs Lisp programmers often try to use the mark for the wrong
 purposes.  See the documentation of `set-mark' for more information.
 
 In Transient Mark mode, this does not activate the mark."
+  (declare (ignore location activate))
   ;; TODO implement
   (set-marker (mark-marker) (point))
   (unless nomsg
@@ -1091,5 +1094,243 @@ With argument 0, interchanges line point is in with line mark is in."
   :type '(choice (const :tag "None" nil)
 		 string)
   :group 'fill)
+
+(defvar *fundamental-mode* 
+  (make-instance 'major-mode
+                 :name "Fundamental")
+"Major mode not specialized for anything in particular.
+Other major modes are defined by comparison with this one.")
+
+(defun turn-on-auto-fill ()
+  "Unconditionally turn on Auto Fill mode."
+  ;; FIXME: implement
+  )
+
+
+;; FIXME: put this info in the following condition
+;; (put 'mark-inactive 'error-conditions '(mark-inactive error))
+;; (put 'mark-inactive 'error-message "The mark is not active now")
+
+(define-condition mark-inactive (lice-condition)
+  ())
+
+(defvar activate-mark-hook nil
+  "Hook run when the mark becomes active.
+It is also run at the end of a command, if the mark is active and
+it is possible that the region may have changed")
+
+(defvar deactivate-mark-hook nil
+  "Hook run when the mark becomes inactive.")
+
+(defun mark (&optional force)
+  "Return this buffer's mark value as integer, or nil if never set.
+
+In Transient Mark mode, this function signals an error if
+the mark is not active.  However, if `mark-even-if-inactive' is non-nil,
+or the argument FORCE is non-nil, it disregards whether the mark
+is active, and returns an integer or nil in the usual way.
+
+If you are using this in an editing command, you are most likely making
+a mistake; see the documentation of `set-mark'."
+  (if (or force (not transient-mark-mode) mark-active mark-even-if-inactive)
+      (marker-position (mark-marker))
+    (signal 'mark-inactive nil)))
+
+;; ;; Many places set mark-active directly, and several of them failed to also
+;; ;; run deactivate-mark-hook.  This shorthand should simplify.
+;; (defsubst deactivate-mark ()
+;;   "Deactivate the mark by setting `mark-active' to nil.
+;; \(That makes a difference only in Transient Mark mode.)
+;; Also runs the hook `deactivate-mark-hook'."
+;;   (cond
+;;    ((eq transient-mark-mode 'lambda)
+;;     (setq transient-mark-mode nil))
+;;    (transient-mark-mode
+;;     (setq mark-active nil)
+;;     (run-hooks 'deactivate-mark-hook))))
+
+(defun set-mark (pos)
+  "Set this buffer's mark to POS.  Don't use this function!
+That is to say, don't use this function unless you want
+the user to see that the mark has moved, and you want the previous
+mark position to be lost.
+
+Normally, when a new mark is set, the old one should go on the stack.
+This is why most applications should use `push-mark', not `set-mark'.
+
+Novice Emacs Lisp programmers often try to use the mark for the wrong
+purposes.  The mark saves a location for the user's convenience.
+Most editing commands should not alter the mark.
+To remember a location for internal use in the Lisp program,
+store it in a Lisp variable.  Example:
+
+   (let ((beg (point))) (forward-line 1) (delete-region beg (point)))."
+
+  (if pos
+      (progn
+	(setq mark-active t)
+	(run-hooks 'activate-mark-hook)
+	(set-marker (mark-marker) pos (current-buffer)))
+      ;; Normally we never clear mark-active except in Transient Mark mode.
+      ;; But when we actually clear out the mark value too,
+      ;; we must clear mark-active in any mode.
+      (progn
+        (setq mark-active nil)
+        (run-hooks 'deactivate-mark-hook)
+        (set-marker (mark-marker) nil))))
+
+(define-buffer-local mark-ring nil
+  "The list of former marks of the current buffer, most recent first.")
+(make-variable-buffer-local 'mark-ring)
+(setf (get 'mark-ring 'permanent-local) t)
+
+(defcustom mark-ring-max 16
+  "*Maximum size of mark ring.  Start discarding off end if gets this big."
+  :type 'integer
+  :group 'editing-basics)
+
+(defvar global-mark-ring nil
+  "The list of saved global marks, most recent first.")
+
+(defcustom global-mark-ring-max 16
+  "*Maximum size of global mark ring.  \
+Start discarding off end if gets this big."
+  :type 'integer
+  :group 'editing-basics)
+
+(defcommand pop-to-mark-command ()
+  "Jump to mark, and pop a new position for mark off the ring
+\(does not affect global mark ring\)."
+  (if (null (mark t))
+      (error "No mark set in this buffer")
+      (progn
+        (goto-char (mark t))
+        (pop-mark))))
+
+;; (defun push-mark-command (arg &optional nomsg)
+;;   "Set mark at where point is.
+;; If no prefix arg and mark is already set there, just activate it.
+;; Display `Mark set' unless the optional second arg NOMSG is non-nil."
+;;   (interactive "P")
+;;   (let ((mark (marker-position (mark-marker))))
+;;     (if (or arg (null mark) (/= mark (point)))
+;; 	(push-mark nil nomsg t)
+;;       (setq mark-active t)
+;;       (run-hooks 'activate-mark-hook)
+;;       (unless nomsg
+;; 	(message "Mark activated")))))
+
+(defcustom set-mark-command-repeat-pop nil
+  "*Non-nil means that repeating \\[set-mark-command] after popping will pop.
+This means that if you type C-u \\[set-mark-command] \\[set-mark-command]
+will pop twice."
+  :type 'boolean
+  :group 'editing)
+
+;; (defun set-mark-command (arg)
+;;   "Set mark at where point is, or jump to mark.
+;; With no prefix argument, set mark, and push old mark position on local
+;; mark ring; also push mark on global mark ring if last mark was set in
+;; another buffer.  Immediately repeating the command activates
+;; `transient-mark-mode' temporarily.
+
+;; With argument, e.g. \\[universal-argument] \\[set-mark-command], \
+;; jump to mark, and pop a new position
+;; for mark off the local mark ring \(this does not affect the global
+;; mark ring\).  Use \\[pop-global-mark] to jump to a mark off the global
+;; mark ring \(see `pop-global-mark'\).
+
+;; If `set-mark-command-repeat-pop' is non-nil, repeating
+;; the \\[set-mark-command] command with no prefix pops the next position
+;; off the local (or global) mark ring and jumps there.
+
+;; With a double \\[universal-argument] prefix argument, e.g. \\[universal-argument] \
+;; \\[universal-argument] \\[set-mark-command], unconditionally
+;; set mark where point is.
+
+;; Setting the mark also sets the \"region\", which is the closest
+;; equivalent in Emacs to what some editors call the \"selection\".
+
+;; Novice Emacs Lisp programmers often try to use the mark for the wrong
+;; purposes.  See the documentation of `set-mark' for more information."
+;;   (interactive "P")
+;;   (if (eq transient-mark-mode 'lambda)
+;;       (setq transient-mark-mode nil))
+;;   (cond
+;;    ((and (consp arg) (> (prefix-numeric-value arg) 4))
+;;     (push-mark-command nil))
+;;    ((not (eq this-command 'set-mark-command))
+;;     (if arg
+;; 	(pop-to-mark-command)
+;;       (push-mark-command t)))
+;;    ((and set-mark-command-repeat-pop
+;; 	 (eq last-command 'pop-to-mark-command))
+;;     (setq this-command 'pop-to-mark-command)
+;;     (pop-to-mark-command))
+;;    ((and set-mark-command-repeat-pop
+;; 	 (eq last-command 'pop-global-mark)
+;; 	 (not arg))
+;;     (setq this-command 'pop-global-mark)
+;;     (pop-global-mark))
+;;    (arg
+;;     (setq this-command 'pop-to-mark-command)
+;;     (pop-to-mark-command))
+;;    ((and (eq last-command 'set-mark-command)
+;; 	 mark-active (null transient-mark-mode))
+;;     (setq transient-mark-mode 'lambda)
+;;     (message "Transient-mark-mode temporarily enabled"))
+;;    (t
+;;     (push-mark-command nil))))
+
+;; (defun push-mark (&optional location nomsg activate)
+;;   "Set mark at LOCATION (point, by default) and push old mark on mark ring.
+;; If the last global mark pushed was not in the current buffer,
+;; also push LOCATION on the global mark ring.
+;; Display `Mark set' unless the optional second arg NOMSG is non-nil.
+;; In Transient Mark mode, activate mark if optional third arg ACTIVATE non-nil.
+
+;; Novice Emacs Lisp programmers often try to use the mark for the wrong
+;; purposes.  See the documentation of `set-mark' for more information.
+
+;; In Transient Mark mode, this does not activate the mark."
+;;   (unless (null (mark t))
+;;     (setq mark-ring (cons (copy-marker (mark-marker)) mark-ring))
+;;     (when (> (length mark-ring) mark-ring-max)
+;;       (move-marker (car (nthcdr mark-ring-max mark-ring)) nil)
+;;       (setcdr (nthcdr (1- mark-ring-max) mark-ring) nil)))
+;;   (set-marker (mark-marker) (or location (point)) (current-buffer))
+;;   ;; Now push the mark on the global mark ring.
+;;   (if (and global-mark-ring
+;; 	   (eq (marker-buffer (car global-mark-ring)) (current-buffer)))
+;;       ;; The last global mark pushed was in this same buffer.
+;;       ;; Don't push another one.
+;;       nil
+;;     (setq global-mark-ring (cons (copy-marker (mark-marker)) global-mark-ring))
+;;     (when (> (length global-mark-ring) global-mark-ring-max)
+;;       (move-marker (car (nthcdr global-mark-ring-max global-mark-ring)) nil)
+;;       (setcdr (nthcdr (1- global-mark-ring-max) global-mark-ring) nil)))
+;;   (or nomsg executing-kbd-macro (> (minibuffer-depth) 0)
+;;       (message "Mark set"))
+;;   (if (or activate (not transient-mark-mode))
+;;       (set-mark (mark t)))
+;;   nil)
+
+;; (defun pop-mark ()
+;;   "Pop off mark ring into the buffer's actual mark.
+;; Does not set point.  Does nothing if mark ring is empty."
+;;   (when mark-ring
+;;     (setq mark-ring (nconc mark-ring (list (copy-marker (mark-marker)))))
+;;     (set-marker (mark-marker) (+ 0 (car mark-ring)) (current-buffer))
+;;     (move-marker (car mark-ring) nil)
+;;     (if (null (mark t)) (ding))
+;;     (setq mark-ring (cdr mark-ring)))
+;;   (deactivate-mark))
+
+(defcommand back-to-indentation ()
+  "Move point to the first non-whitespace character on this line."
+  (beginning-of-line 1)
+  (skip-syntax-forward '(:whitespace) (line-end-position))
+  ;; Move back over chars that have whitespace syntax but have the p flag.
+  (backward-prefix-chars))
 
 (provide :lice-0.1/simple)

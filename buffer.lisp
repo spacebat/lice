@@ -54,6 +54,8 @@ is displayed in a window.")
    (display-time :type integer :initform 0 :accessor buffer-display-time :documentation
 		 "The last time the buffer was switched to in a window.")
    (major-mode :type major-mode :initarg :major-mode :accessor buffer-major-mode)
+   (local-map :initform nil :initarg :local-map :accessor buffer-local-map :documentation
+           "The keymap local to the buffer. This overrides major mode bindings.")
    (locals-variables :type hash-table :initform (make-hash-table) :accessor buffer-local-variables)
    (locals :type hash-table :initform (make-hash-table) :accessor buffer-locals))
   (:documentation "A Buffer."))
@@ -87,7 +89,7 @@ is displayed in a window.")
    (markers :type list :initform '() :accessor buffer-markers)
    (auto-save-modified :type integer :initform 0 :accessor buffer-auto-save-modified)
    (modiff :type integer :initform 0 :accessor buffer-modiff)
-   (syntax-table :initform *standard-syntax-table* :accessor buffer-syntax-table)
+   ;;(syntax-table :initform *standard-syntax-table* :accessor buffer-syntax-table)
    (undo-list :initform '() :accessor buffer-undo-list
               :documentation "List of undo entries in current buffer.
 Recent changes come first; older changes follow newer.
@@ -161,7 +163,7 @@ If you set the marker not to point anywhere, the buffer will have no mark."
 ;;; buffer locals
 
 (defstruct buffer-local-binding
-  symbol value doc-string)
+  symbol value local-p doc-string)
 
 (defvar *global-buffer-locals* (make-hash-table)
   "The default values of buffer locals and a hash table containing all possible buffer locals")
@@ -171,30 +173,39 @@ If you set the marker not to point anywhere, the buffer will have no mark."
     (declare (ignore v))
     b))  
 
-(defun make-buffer-local (symbol default-value &optional doc-string)
-  (unless (buffer-local-exists-p symbol)
-    (setf (gethash symbol *global-buffer-locals*)
-	  (make-buffer-local-binding :symbol symbol
-				     :value default-value
-				     :doc-string doc-string))))
+(defun get-buffer-local-create (symbol default-value &optional doc-string)
+  (if (buffer-local-exists-p symbol)
+      (gethash symbol *global-buffer-locals*)
+      (setf (gethash symbol *global-buffer-locals*)
+            (make-buffer-local-binding :symbol symbol
+                                       :value default-value
+                                       :doc-string doc-string))))
 
 (defmacro define-buffer-local (symbol default-value &optional doc-string)
   "buffer locals are data hooks you can use to store values per
 buffer. Use them when building minor and major modes. You
 generally want to define them with this so you can create a
-docstring for them. there is also `make-buffer-local'."
+docstring for them. there is also `get-buffer-local-create'."
   `(progn
      (when (boundp ',symbol)
        (warn "Symbol ~s is already bound. Existing uses of symbol will not be buffer local." ',symbol)
        (makunbound ',symbol))
      (define-symbol-macro ,symbol (buffer-local ',symbol))
-     (make-buffer-local ',symbol ,default-value ,doc-string)))
+     (get-buffer-local-create ',symbol ,default-value ,doc-string)))
 
-(defun (setf buffer-local) (symbol value)
+(defun (setf buffer-local) (value symbol)
   "Set the value of the buffer local in the current buffer."
-  (setf (gethash symbol (buffer-locals *current-buffer*)) value)
   ;; create a global buffer local entry if needed.
-  (make-buffer-local symbol nil))
+  (let ((global-binding (get-buffer-local-create symbol value)))
+    ;; if the symbol becomes buffer local when set or it has a buffer
+    ;; value
+    (if (or (buffer-local-binding-local-p global-binding)
+            (second (multiple-value-list
+                     (gethash symbol (buffer-locals *current-buffer*)))))
+        ;; set the buffer's value
+        (setf (gethash symbol (buffer-locals *current-buffer*)) value)
+        ;; set the global value
+        (setf (buffer-local-binding-value global-binding) value))))
 
 (defun buffer-local (symbol)
   "Return the value of the buffer local symbol. If none exists
@@ -207,6 +218,69 @@ exist, throw an error."
 	  (if b
               (buffer-local-binding-value v)
               (error "No binding for buffer-local ~s" symbol))))))
+
+(defun make-local-variable (symbol)
+  "Make VARIABLE have a separate value in the current buffer.
+Other buffers will continue to share a common default value.
+\(The buffer-local value of VARIABLE starts out as the same value
+VARIABLE previously had.  If VARIABLE was void, it remains void.\)
+Return VARIABLE.
+
+If the variable is already arranged to become local when set,
+this function causes a local value to exist for this buffer,
+just as setting the variable would do.
+
+Unlike GNU/Emacs This function does not return
+VARIABLE. See alse `(SETF MAKE-LOCAL-VARIABLE)'.
+
+See also `make-variable-buffer-local' and `define-buffer-local'.
+
+Do not use `make-local-variable' to make a hook variable buffer-local.
+Instead, use `add-hook' and specify t for the LOCAL argument."
+  (setf (gethash symbol (buffer-locals *current-buffer*)) (buffer-local symbol))
+  ;; only setq and setf expand the symbol-macro properly, so we can't
+  ;; return the symbol.
+  nil)
+
+(defun (setf make-local-variable) (value symbol)
+  "Make the symbol local to the current buffer like
+`make-local-variable' and also set its value in the buffer."
+  (setf (gethash symbol (buffer-locals *current-buffer*)) value))
+
+(defun make-variable-buffer-local (variable)
+  "Make VARIABLE become buffer-local whenever it is set.
+At any time, the value for the current buffer is in effect,
+unless the variable has never been set in this buffer,
+in which case the default value is in effect.
+Note that binding the variable with `let', or setting it while
+a `let'-style binding made in this buffer is in effect,
+does not make the variable buffer-local.  Return VARIABLE.
+
+In most cases it is better to use `make-local-variable',
+which makes a variable local in just one buffer.
+
+The function `default-value' gets the default value and `set-default' sets it."
+  (setf (buffer-local-binding-local-p (gethash variable *global-buffer-locals*)) t))
+
+(defun default-value (symbol)
+  "Return SYMBOL's default value.
+This is the value that is seen in buffers that do not have their own values
+for this variable.  The default value is meaningful for variables with
+local bindings in certain buffers."
+  (buffer-local-binding-value (gethash symbol *global-buffer-locals*)))
+
+(defun (setf default-value) (value symbol)
+  "Set symbol's default value to value.  symbol and value are evaluated.
+The default value is seen in buffers that do not have their own values
+for this variable."
+  (setf (buffer-local-binding-value (gethash symbol *global-buffer-locals*)) value)  )
+
+(depricate set-default (setf default-value))
+(defun set-default (symbol value)
+  "Set symbol's default value to value.  symbol and value are evaluated.
+The default value is seen in buffers that do not have their own values
+for this variable."
+  (setf (default-value symbol) value))
 
 (define-buffer-local *buffer-invisibility-spec* nil
   "Invisibility spec of this buffer.
@@ -917,7 +991,7 @@ The value is never nil."))
 			       :gap-size 1
 			       :mode-line *mode-line-format*
 			       :name name
-			       :major-mode fundamental-mode)))
+			       :major-mode *fundamental-mode*)))
 	 (set-marker (buffer-point b) 0 b)
 	 (set-marker (mark-marker b) 0 b)
 	 (push b *buffer-list*)
@@ -1069,9 +1143,9 @@ Use `switch-to-buffer' or `pop-to-buffer' to switch buffers permanently."
   (setf buffer (get-buffer buffer))
   (if buffer
       (progn
-	(when *current-buffer*
-	  (record-local-variables *current-buffer*))
-	(set-local-variables buffer)
+	;; (when *current-buffer*
+        ;; (record-local-variables *current-buffer*))
+	;; (set-local-variables buffer)
 	(setf *current-buffer* buffer))
       (error "No buffer named ~s" buffer)))
 
@@ -1096,36 +1170,36 @@ means that other_buffer is more likely to choose a relevant buffer."
   "Name of default directory of current buffer.
 To interactively change the default directory, use command `cd'.")
 
-(defstruct local-variable-binding
-  value backup)
+;; (defstruct local-variable-binding
+;;   value backup)
 
-(defun make-local-variable (symbol)
-  "Make variable have a separate value in the current buffer.
-Other buffers will continue to share a common default value.
- (The buffer-local value of variable starts out as the same value
-variable previously had.)
-Return variable."
-  (setf (gethash symbol (buffer-local-variables (current-buffer))) 
-	(make-local-variable-binding :value (symbol-value symbol)))
-  symbol)
+;; (defun make-local-variable (symbol)
+;;   "Make variable have a separate value in the current buffer.
+;; Other buffers will continue to share a common default value.
+;;  (The buffer-local value of variable starts out as the same value
+;; variable previously had.)
+;; Return variable."
+;;   (setf (gethash symbol (buffer-local-variables (current-buffer))) 
+;; 	(make-local-variable-binding :value (symbol-value symbol)))
+;;   symbol)
 
-(defun record-local-variables (buffer)
-  "Update the values BUFFER's local variables."
-  (labels ((update (k v)
-	     (if (boundp k)
-		 (setf (local-variable-binding-value v) (symbol-value k)
-		       (symbol-value k) (local-variable-binding-backup v))
-		 (remhash k (buffer-local-variables buffer)))))
-    (maphash #'update (buffer-local-variables buffer))))
+;; (defun record-local-variables (buffer)
+;;   "Update the values BUFFER's local variables."
+;;   (labels ((update (k v)
+;; 	     (if (boundp k)
+;; 		 (setf (local-variable-binding-value v) (symbol-value k)
+;; 		       (symbol-value k) (local-variable-binding-backup v))
+;; 		 (remhash k (buffer-local-variables buffer)))))
+;;     (maphash #'update (buffer-local-variables buffer))))
 
-(defun set-local-variables (buffer)
-  "Set all variables to the buffer local value."
-  (labels ((set-it (k v)
-	     (if (boundp k)
-		 (setf (local-variable-binding-backup v) (symbol-value k)
-		       (symbol-value k) (local-variable-binding-value v))
-		 (remhash k (buffer-local-variables buffer)))))
-    (maphash #'set-it (buffer-local-variables buffer))))
+;; (defun set-local-variables (buffer)
+;;   "Set all variables to the buffer local value."
+;;   (labels ((set-it (k v)
+;; 	     (if (boundp k)
+;; 		 (setf (local-variable-binding-backup v) (symbol-value k)
+;; 		       (symbol-value k) (local-variable-binding-value v))
+;; 		 (remhash k (buffer-local-variables buffer)))))
+;;     (maphash #'set-it (buffer-local-variables buffer))))
 
 ;;; reading from the buffer
 
@@ -1139,5 +1213,55 @@ Return variable."
                         :start (buffer-char-to-aref buffer (point buffer)))
     (set-point (buffer-aref-to-char buffer pos))
     obj))
+
+(defun set-major-mode (mm)
+  "Set the current buffer's major mode."
+  ;; Call All inherited init functions
+  (mapc (lambda (m)
+          (set-major-mode (symbol-value m))) (major-mode-inherit-init mm))
+
+  ;; Now call this mm's init function
+  (when (major-mode-init mm)
+    (funcall (major-mode-init mm)))
+
+  ;; Finally, set the mode and call the hook
+  (setf (buffer-major-mode (current-buffer)) mm)
+  (run-hooks (major-mode-hook mm)))
+
+(defun major-mode ()
+  (buffer-major-mode (current-buffer)))
+
+(define-buffer-local *fill-column* 70
+"*Column beyond which automatic line-wrapping should happen.
+Interactively, you can set the buffer local value using \\[set-fill-column].")
+
+(defun buffer-list (&optional (frame (selected-frame)))
+  "Return a list of all existing live buffers.
+If the optional arg frame is a frame, we return the buffer list
+in the proper order for that frame: the buffers in FRAME's `buffer-list'
+frame parameter come first, followed by the rest of the buffers."
+  (declare (ignore frame))
+  *buffer-list*)
+
+(define-buffer-local *auto-fill-function* nil
+  "Function called (if non-nil) to perform auto-fill.
+It is called after self-inserting any character specified in
+the `auto-fill-chars' table.
+NOTE: This variable is not a hook;
+its value may not be a list of functions.")
+(make-variable-buffer-local '*auto-fill-function*)
+
+(define-buffer-local mark-active nil
+  "Non-nil means the mark and region are currently active in this buffer.")
+(make-variable-buffer-local 'mark-active)
+
+(define-buffer-local tab-width 8
+  "*Distance between tab stops (for display of tab characters), in columns.")
+(make-variable-buffer-local 'tab-width)
+
+(define-buffer-local left-margin 0
+  "*Column for the default indent-line-function to indent to.
+Linefeed indents to this column in Fundamental mode.")
+(make-variable-buffer-local 'left-margin)
 
 (provide :lice-0.1/buffer)

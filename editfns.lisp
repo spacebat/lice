@@ -1,5 +1,33 @@
 (in-package :lice)
 
+(defvar *inhibit-field-text-motion* nil
+  "Non-nil means text motion commands don't notice fields.")
+
+(defvar *buffer-access-fontify-functions* nil
+"List of functions called by `buffer-substring' to fontify if necessary.
+Each function is called with two arguments which specify the range
+of the buffer being accessed.")
+
+(defvar *buffer-access-fontified-property* nil
+"Property which (if non-nil) indicates text has been fontified.
+`buffer-substring' need not call the `buffer-access-fontify-functions'
+functions if all the text being accessed has this property.")
+
+(defvar *system-name* nil
+  "The host name of the machine Emacs is running on.")
+
+(defvar *user-full-name* nil
+  "The full name of the user logged in.")
+
+(defvar *user-login-name* nil
+  "The user's name, taken from environment variables if possible.")
+
+(defvar *user-real-login-name* nil
+  "The user's name, based upon the real uid only.")
+
+(defvar *operating-system-release* nil
+  "The release of the operating system Emacs is running on.")
+
 (defun get-pos-property (position prop &optional (object (current-buffer)))
   "Return the value of property PROP, in OBJECT at POSITION.
 It's the value of PROP that a char inserted at POSITION would get.
@@ -196,9 +224,6 @@ is after LIMIT, then LIMIT will be returned instead."
   (multiple-value-bind (beg end) (find-field pos nil :end-limit limit :end t)
     (declare (ignore beg))
     end))
-
-(defvar *inhibit-field-text-motion* nil
-  "Non-nil means text motion commands don't notice fields.")
 
 (defun constrain-to-field (new-pos old-pos &optional escape-from-edge only-in-line inhibit-capture-property)
   "Return the position closest to NEW-POS that is in the same field as OLD-POS.
@@ -418,7 +443,149 @@ This function does not move point."
               (point))))
     (constrain-to-field pt (point) (not (eql n 1)) t nil)))
 
+(defun line-end-position (&optional (n 1))
+  "Return the character position of the last character on the current line.
+With argument N not nil or 1, move forward N - 1 lines first.
+If scan reaches end of buffer, return that position.
+
+This function constrains the returned position to the current field
+unless that would be on a different line than the original,
+unconstrained result.  If N is nil or 1, and a rear-sticky field ends
+at point, the scan stops as soon as it starts.  To ignore field
+boundaries bind `inhibit-field-text-motion' to t.
+
+This function does not move point."
+  (check-type n integer)
+  (let ((end-pos (buffer-scan-newline (current-buffer) (point) (point-max) (if (<= n 0) (- n 1) n))))
+    (constrain-to-field end-pos (point) nil t nil)))
+
 (defun clip-to-bounds (lower num upper)
   (max (min num upper) lower))
+
+(defun string-to-char ()
+  (error "Unimplemented"))
+
+(defun char-to-string ()
+  (error "Unimplemented"))
+
+(defun buffer-string ()
+  (error "Unimplemented"))
+
+(defun field-string-no-properties ()
+  (error "Unimplemented"))
+
+(defun delete-field ()
+  (error "Unimplemented"))
+
+(defmacro save-current-buffer ()
+  (error "Unimplemented"))
+
+(defun bufsize ()
+  (error "Unimplemented"))
+
+(defun point-min-marker ()
+  (error "Unimplemented"))
+
+(defun point-max-marker ()
+  (error "Unimplemented"))
+
+(defun gap-position ()
+  (error "Unimplemented"))
+
+(defun gap-size ()
+  (error "Unimplemented"))
+
+(defun position-bytes ()
+  (error "Unimplemented"))
+
+(defun byte-to-position ()
+  (error "Unimplemented"))
+
+(defun previous-char ()
+  (error "Unimplemented"))
+
+(defun insert-before-markers ()
+  (error "Unimplemented"))
+
+(defun insert-and-inherit ()
+  (error "Unimplemented"))
+
+(defun insert-and-inherit-before-markers ()
+  (error "Unimplemented"))
+
+(defun user-login-name ()
+  (error "Unimplemented"))
+
+(defun user-real-login-name ()
+  (error "Unimplemented"))
+
+(defun user-uid ()
+  (error "Unimplemented"))
+
+(defun user-real-uid ()
+  (error "Unimplemented"))
+
+(defun user-full-name ()
+  (error "Unimplemented"))
+
+(defun emacs-pid ()
+  (error "Unimplemented"))
+
+(defun current-time ()
+  (error "Unimplemented"))
+
+(defun format-time-string ()
+  (error "Unimplemented"))
+
+(defun float-time ()
+  (error "Unimplemented"))
+
+(defun decode-time ()
+  (error "Unimplemented"))
+
+(defun encode-time ()
+  (error "Unimplemented"))
+
+(defun current-time-string ()
+  (error "Unimplemented"))
+
+(defun current-time-zone ()
+  (error "Unimplemented"))
+
+(defun set-time-zone-rule ()
+  (error "Unimplemented"))
+
+(defun system-name ()
+  (error "Unimplemented"))
+
+(defun message-box ()
+  (error "Unimplemented"))
+
+(defun message-or-box ()
+  (error "Unimplemented"))
+
+(defun current-message ()
+  (error "Unimplemented"))
+
+(defun compare-buffer-substrings ()
+  (error "Unimplemented"))
+
+(defun subst-char-in-region ()
+  (error "Unimplemented"))
+
+(defun translate-region-internal ()
+  (error "Unimplemented"))
+
+(defun widen ()
+  (error "Unimplemented"))
+
+(defun narrow-to-region ()
+  (error "Unimplemented"))
+
+(defun save-restriction ()
+  (error "Unimplemented"))
+
+(defun transpose-regions ()
+  (error "Unimplemented"))
 
 (provide :lice-0.1/editfns)

@@ -2,14 +2,21 @@
 
 (in-package #:lice)
 
-(define-major-mode debugger-mode
-    (:name "Debugger"
-     :map (let ((m (make-sparse-keymap)))
-	    (define-key m (kbd "q") 'debugger-invoke-top-level-restart)
-	    m))
-  "debugger mode"
-  ;; empty init
-  )
+(defvar *debug-on-error* t
+  "Non-nil means enter the debugger if an unhandled error is signaled.")
+
+(defvar *debug-on-quit* nil
+  "Non-nil means enter the debugger if quit is signaled (C-g, for example).")
+
+(defvar *debugger-mode*
+  (make-instance 'major-mode
+                 :name "Debugger"
+                 :map  (let ((m (make-sparse-keymap)))
+                         (define-key m (kbd "q") 'debugger-invoke-top-level-restart)
+                         m)))
+(defun debugger-mode ()
+  "See `*debugger-mode*'"
+  (set-major-mode *debugger-mode*))
 
 (defun enter-debugger (condition old-debugger-value)
   "Create a debugger buffer, print the error and any active restarts."
@@ -24,7 +31,7 @@
   (select-window (first (frame-window-list *current-frame*)))
   (pop-to-buffer (get-buffer-create "*debugger*"))
   (erase-buffer)
-  (set-major-mode debugger-mode)
+  (set-major-mode *debugger-mode*)
   (insert (format nil "Debugger~%~a~%~%~a~%~{~a~%~}" (backtrace-as-string) condition (compute-restarts)))
   (recursive-edit)
   ;; if we exit the recursive edit we'll fall into the regular debugger.

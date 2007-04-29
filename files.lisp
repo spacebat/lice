@@ -1,5 +1,46 @@
 (in-package :lice)
 
+(defcustom *mode-require-final-newline* t
+  "Whether to add a newline at end of file, in certain major modes.
+Those modes set `require-final-newline' to this value when you enable them.
+They do so because they are often used for files that are supposed
+to end in newlines, and the question is how to arrange that.
+
+A value of t means do this only when the file is about to be saved.
+A value of `visit' means do this right after the file is visited.
+A value of `visit-save' means do it at both of those times.
+Any other non-nil value means ask user whether to add a newline, when saving.
+
+nil means do not add newlines.  That is a risky choice in this variable
+since this value is used for modes for files that ought to have final newlines.
+So if you set this to nil, you must explicitly check and add
+a final newline, whenever you save a file that really needs one."
+  :type '(choice (const :tag "When visiting" visit)
+		 (const :tag "When saving" t)
+		 (const :tag "When visiting or saving" visit-save)
+		 (const :tag "Don't add newlines" nil)
+		 (other :tag "Ask each time" ask))
+  :group 'editing-basics
+  :version "22.1")
+
+(defcustom-buffer-local *require-final-newline* nil
+  "Whether to add a newline automatically at the end of the file.
+
+A value of t means do this only when the file is about to be saved.
+A value of `visit' means do this right after the file is visited.
+A value of `visit-save' means do it at both of those times.
+Any other non-nil value means ask user whether to add a newline, when saving.
+nil means don't add newlines.
+
+Certain major modes set this locally to the value obtained
+from `mode-require-final-newline'."
+  :type '(choice (const :tag "When visiting" visit)
+		 (const :tag "When saving" t)
+		 (const :tag "When visiting or saving" visit-save)
+		 (const :tag "Don't add newlines" nil)
+		 (other :tag "Ask each time" ask))
+  :group 'editing-basics)
+
 (defun format-filename (filename)
   (declare (type pathname filename))
   (format nil "~a~@[.~a~]" 
@@ -31,7 +72,7 @@
 			   ;; 1- because the data has been allocated with 1 extra character
 			   :gap-start (1- (length data))
 			   :gap-size 1 ;;(length +other-buf+)
-			   :major-mode fundamental-mode)))
+			   :major-mode *fundamental-mode*)))
     (set-marker (buffer-point b) 0 b)
     (set-marker (mark-marker b) 0 b)
     b))

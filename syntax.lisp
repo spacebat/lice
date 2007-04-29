@@ -152,18 +152,21 @@ If POS is outside the buffer's accessible portion, return nil."
 ;; FIXME: having the flags as a list is memory intensive. How about a
 ;; bit vector or number and a function that converts between the two?
 
+(defun buffer-syntax-table (buffer)
+  (major-mode-syntax-table (buffer-major-mode buffer)))
+
 (defun syntax-table (&aux (buffer (current-buffer)))
   (buffer-syntax-table buffer))
 
-(defun (setf syntax-table) (value &aux (buffer (current-buffer)))
-  "Select a new syntax table for the current buffer. One argument, a syntax table."
-  (check-type value syntax-table)
-  (setf (buffer-syntax-table buffer) value))
+;; (defun (setf syntax-table) (value &aux (buffer (current-buffer)))
+;;   "Select a new syntax table for the current buffer. One argument, a syntax table."
+;;   (check-type value syntax-table)
+;;   (setf (buffer-syntax-table buffer) value))
 
-;; The above looks a bit weird so lets also have a set function.
-(defun set-syntax-table (value)
-  "Select a new syntax table for the current buffer. One argument, a syntax table."
-  (setf (syntax-table) value))
+;; ;; The above looks a bit weird so lets also have a set function.
+;; (defun set-syntax-table (value)
+;;   "Select a new syntax table for the current buffer. One argument, a syntax table."
+;;   (setf (syntax-table) value))
 
 (defun &syntax-with-flags (ch table &optional (default :whitespace))
   (or (gethash ch (syntax-table-hash table))
@@ -455,6 +458,28 @@ update the global data."
                       :start-begv (begv buffer)
                       :start-pos pos)))
 
+;; FIXME: doesn't handle ^. Maybe if :not is the first symbol in the list?
+(defun skip-syntax-forward (syntax-list &optional (lim (point-max)))
+  "Move point forward across chars in specified syntax classes.
+SYNTAX-LIST is a string of syntax code characters.
+Stop before a char whose syntax is not in SYNTAX-LIST, or at position LIM.
+If SYNTAX-LIST starts with ^, skip characters whose syntax is NOT in SYNTAX-LIST.
+This function returns the distance traveled, either zero or positive."
+  (check-type lim integer)
+  (let* ((buffer (current-buffer))
+         (table (syntax-table))
+         (pos (point))
+         (start pos)
+         (pos-aref (buffer-char-to-aref buffer pos))
+         ch syntax)
+    (while (< pos lim)
+      (setf ch (buffer-fetch-char pos-aref buffer)
+            syntax (&syntax ch table))
+      (unless (find syntax syntax-list)
+        (return nil))
+      (inc-both pos pos-aref buffer))
+    (goto-char pos)
+    (- pos start)))
 
 (defun skip-chars (forwardp syntaxp string lim)
   (declare (ignore syntaxp))

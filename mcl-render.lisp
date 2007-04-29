@@ -191,10 +191,10 @@ hardware.")
                     (butlast keystroke))))
     ;;(format t "k: ~s ~s ~s~%" keystroke ch mods)
     (setf *mcl-key-list* (nconc *mcl-key-list* 
-                                (list (make-instance 'key
-                                                     :meta (and (find :meta mods) t)
-                                                     :control (and (find :control mods) t)
-                                                     :char ch))))
+                                (list (make-key
+                                       :meta (and (find :meta mods) t)
+                                       :control (and (find :control mods) t)
+                                       :char ch))))
     (funcall *mcl-stackgroup* nil)))
 
 (defmethod ccl:view-draw-contents ((win frame))

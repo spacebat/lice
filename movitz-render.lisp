@@ -177,16 +177,16 @@ the text properties present."
   "Return a key structure."
   (let (control meta shift)
     (loop
-     (multiple-value-bind (key release) (muerte.x86-pc.keyboard::get-key)
-       (when (and key
-		  (characterp key) 
-		  (not release))
-	 (return-from frame-read-event (make-instance 'key
-						      :char key
-						      :control (logbitp muerte.x86-pc.keyboard::+qualifier-ctrl+
-									muerte.x86-pc.keyboard::*qualifier-state*)
-						      :meta (logbitp muerte.x86-pc.keyboard::+qualifier-alt+
-								     muerte.x86-pc.keyboard::*qualifier-state*))))))))
+       (multiple-value-bind (key release) (muerte.x86-pc.keyboard::get-key)
+         (when (and key
+                    (characterp key) 
+                    (not release))
+           (return-from frame-read-event (make-key
+                                          :char key
+                                          :control (logbitp muerte.x86-pc.keyboard::+qualifier-ctrl+
+                                                            muerte.x86-pc.keyboard::*qualifier-state*)
+                                          :meta (logbitp muerte.x86-pc.keyboard::+qualifier-alt+
+                                                         muerte.x86-pc.keyboard::*qualifier-state*))))))))
 
 ;;; some frame stuff
 

@@ -48,7 +48,10 @@ for passing as the last argument to (apply #'make-key ...)"
 
 (defun parse-char-name (string)
   "Return the character whose name is STRING."
-  (or (name-char string)
+  (or (cond 
+        ((string= string "RET") #\Newline)
+        ((string= string "TAB") #\Tab))
+      (name-char string)
       (and (= (length string) 1)
 	   (char string 0))))
 
@@ -61,7 +64,7 @@ for passing as the last argument to (apply #'make-key ...)"
 	   (mods (parse-mods string (if p (1+ p) 0)))
 	   (ch (parse-char-name (subseq string (if p (1+ p) 0)))))
       (and ch
-	   (apply #'make-instance 'key :char ch mods))))
+	   (apply #'make-key :char ch mods))))
   
 (defun parse-key-seq (keys)
   "KEYS is a key sequence. Parse it and return the list of keys."
@@ -225,7 +228,7 @@ which is the input stream for reading characters.
 This function does not move point."
   (let* ((stdout (make-string-output-stream))
          (*standard-output* stdout)
-         (*standard-error* stdout)
+         (*error-output* stdout)
          (*debug-io* stdout)
          (string (buffer-substring-no-properties start end))
          (pos 0)

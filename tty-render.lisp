@@ -89,8 +89,9 @@ the text properties present."
 	cursor-x
 	cursor-y
 	(cache-size (length (lc-cache (window-cache w))))
-	(linear (frame-double-buffer frame))
-	(display (frame-2d-double-buffer frame)))
+	;; (linear (frame-double-buffer frame))
+	;; (display (frame-2d-double-buffer frame))
+        )
     ;; rxvt draws black on black if i don't turn on a color
     (cl-ncurses::attron (cl-ncurses::COLOR-PAIR 1))
     ;; Special case: when the buffer is empty
@@ -195,10 +196,10 @@ the text properties present."
 		   #\Tab)
 		  (t
 		   (code-char ch))))
-      (make-instance 'key
-		     :char key
-		     :control control
-		     :meta meta))))
+      (make-key
+       :char key
+       :control control
+       :meta meta))))
 
 ;;; some frame stuff
 

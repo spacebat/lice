@@ -2,7 +2,7 @@
 
 (in-package "LICE")
 
-(defvar *indent-line-function* 'indent-relative
+(define-buffer-local *indent-line-function* 'indent-relative
   "Function to indent the current line.
 This function will be called with no arguments.
 If it is called somewhere where auto-indentation cannot be done
@@ -249,5 +249,63 @@ regardless of which buffer is displayed in WINDOW.
 This is consistent with other cursor motion functions
 and makes it possible to use `vertical-motion' in any buffer,
 whether or not it is currently displayed in some window."
+  (declare (ignore lines window))
   (error "unimplemented")
   )
+
+(defun indent-line-to (column)
+  "Indent current line to COLUMN.
+This function removes or adds spaces and tabs at beginning of line
+only if necessary.  It leaves point at end of indentation."
+  (back-to-indentation)
+  (let ((cur-col (current-column)))
+    (cond ((< cur-col column)
+	   (if (>= (- column (* (/ cur-col tab-width) tab-width)) tab-width)
+	       (delete-region (point)
+			      (progn (skip-chars-backward " ") (point))))
+	   (indent-to column))
+	  ((> cur-col column) ; too far right (after tab?)
+	   (delete-region (progn (move-to-column column t) (point))
+			  (progn (back-to-indentation) (point)))))))
+
+(defun current-left-margin ()
+  "Return the left margin to use for this line.
+This is the value of the buffer-local variable `left-margin' plus the value
+of the `left-margin' text-property at the start of the line."
+  (save-excursion
+    (back-to-indentation)
+    (max 0
+	 (+ left-margin (or (get-text-property
+			     (if (and (eobp) (not (bobp)))
+				 (1- (point)) (point))
+			     'left-margin) 0)))))
+
+(defcommand move-to-left-margin ((&optional (n 1) (force t))
+                                 :prefix)
+  "Move to the left margin of the current line.
+With optional argument, move forward N-1 lines first.
+The column moved to is the one given by the `current-left-margin' function.
+If the line's indentation appears to be wrong, and this command is called
+interactively or with optional argument FORCE, it will be fixed."
+  ;;(interactive (list (prefix-numeric-value current-prefix-arg) t))
+  (check-type n integer)
+  (beginning-of-line n)
+  (skip-chars-forward " \t")
+  (if (minibufferp (current-buffer))
+      (if (save-excursion (beginning-of-line) (bobp))
+	  (goto-char (minibuffer-prompt-end))
+	(beginning-of-line))
+    (let ((lm (current-left-margin))
+	  (cc (current-column)))
+      (cond ((> cc lm)
+	     (if (> (move-to-column lm force) lm)
+		 ;; If lm is in a tab and we are not forcing, move before tab
+		 (backward-char 1)))
+	    ((and force (< cc lm))
+	     (indent-to-left-margin))))))
+
+;; This used to be the default indent-line-function,
+;; used in Fundamental Mode, Text Mode, etc.
+(defun indent-to-left-margin ()
+  "Indent current line to the column given by `current-left-margin'."
+  (indent-line-to (current-left-margin)))

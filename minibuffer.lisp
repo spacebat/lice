@@ -14,54 +14,50 @@ in this use of the minibuffer.")
 (defclass minibuffer-window (window)
   ())
 
-(define-major-mode minibuffer-read-mode
-  (:name "minibuffer mode"
-   :map (let ((m (make-sparse-keymap)))
-	  (define-key m (make-instance 'key :char #\m :control t) 'exit-minibuffer)
-	  (define-key m (make-instance 'key :char #\Newline) 'exit-minibuffer)
-	  (define-key m (make-instance 'key :char #\Return) 'exit-minibuffer)
-          (define-key m (make-instance 'key :char #\j :control t) 'exit-minibuffer)
-          (define-key m (make-instance 'key :char #\p :meta t) 'previous-history-element)
-          (define-key m (make-instance 'key :char #\n :meta t) 'next-history-element)
-	  (define-key m (make-instance 'key :char #\g :control t) 'abort-recursive-edit)
-	  m))
-  "minibuffer read mode"
-  ;; empty init
-  )
+(defvar *minibuffer-local-map*
+  (let ((m (make-sparse-keymap)))
+    (define-key m (make-key :char #\m :control t) 'exit-minibuffer)
+    (define-key m (make-key :char #\Newline) 'exit-minibuffer)
+    (define-key m (make-key :char #\Return) 'exit-minibuffer)
+    (define-key m (make-key :char #\j :control t) 'exit-minibuffer)
+    (define-key m (make-key :char #\p :meta t) 'previous-history-element)
+    (define-key m (make-key :char #\n :meta t) 'next-history-element)
+    (define-key m (make-key :char #\g :control t) 'abort-recursive-edit)
+    m)
+  "Default keymap to use when reading from the minibuffer.")
 
-(define-major-mode minibuffer-complete-mode
-  (:name "minibuffer mode"
-   :map (let ((m (make-sparse-keymap)))
-	  (define-key m (make-instance 'key :char #\m :control t) 'exit-minibuffer)
-	  (define-key m (make-instance 'key :char #\Newline) 'exit-minibuffer)
-	  (define-key m (make-instance 'key :char #\Return) 'exit-minibuffer)
-          (define-key m (make-instance 'key :char #\j :control t) 'exit-minibuffer)
-          (define-key m (make-instance 'key :char #\p :meta t) 'previous-history-element)
-          (define-key m (make-instance 'key :char #\n :meta t) 'next-history-element)
-          (define-key m (make-instance 'key :char #\i :control t) 'minibuffer-complete)
-          (define-key m (make-instance 'key :char #\Tab) 'minibuffer-complete)
-	  (define-key m (make-instance 'key :char #\g :control t) 'abort-recursive-edit)
-	  m))
-  "minibuffer complete mode"
-  ;; empty init
-  )
+(defvar *minibuffer-local-completion-map*
+  (let ((m (make-sparse-keymap)))
+    (define-key m (make-key :char #\i :control t) 'minibuffer-complete)
+    (define-key m (make-key :char #\Tab) 'minibuffer-complete)
+    (setf (keymap-parent m) *minibuffer-local-map*)
+    m)
+  "Local keymap for minibuffer input with completion.")
 
-(define-major-mode minibuffer-must-match-mode
-  (:name "minibuffer mode"
-   :map (let ((m (make-sparse-keymap)))
-	  (define-key m (make-instance 'key :char #\m :control t) 'minibuffer-complete-and-exit)
-	  (define-key m (make-instance 'key :char #\Newline) 'minibuffer-complete-and-exit)
-	  (define-key m (make-instance 'key :char #\Return) 'minibuffer-complete-and-exit)
-          (define-key m (make-instance 'key :char #\j :control t) 'minibuffer-complete-and-exit)
-          (define-key m (make-instance 'key :char #\p :meta t) 'previous-history-element)
-          (define-key m (make-instance 'key :char #\n :meta t) 'next-history-element)
-          (define-key m (make-instance 'key :char #\i :control t) 'minibuffer-complete)
-          (define-key m (make-instance 'key :char #\Tab) 'minibuffer-complete)
-	  (define-key m (make-instance 'key :char #\g :control t) 'abort-recursive-edit)
-	  m))
-  "minibuffer complete mode"
-  ;; empty init
-  )
+(defvar *minibuffer-local-must-match-map*
+  (let ((m (make-sparse-keymap)))
+    (define-key m (make-key :char #\m :control t) 'minibuffer-complete-and-exit)
+    (define-key m (make-key :char #\Newline) 'minibuffer-complete-and-exit)
+    (define-key m (make-key :char #\Return) 'minibuffer-complete-and-exit)
+    (define-key m (make-key :char #\j :control t) 'minibuffer-complete-and-exit)
+    (setf (keymap-parent m) *minibuffer-local-completion-map*)
+    m)
+  "Local keymap for minibuffer input with completion, for exact match.")
+
+(defvar *minibuffer-read-mode*
+  (make-instance 'major-mode
+                 :name "minibuffer mode"
+                 :map *minibuffer-local-map*))
+
+(defvar *minibuffer-complete-mode*
+  (make-instance 'major-mode
+                 :name "minibuffer mode"
+                 :map *minibuffer-local-completion-map*))
+
+(defvar *minibuffer-must-match-mode*
+  (make-instance 'major-mode
+                 :name "minibuffer mode"
+                 :map *minibuffer-local-must-match-map*))
 
 (defvar *minibuffer-completion-table* nil
   "Alist or obarray used for completion in the minibuffer.
@@ -82,9 +78,11 @@ t means to return a list of all possible completions of STRING.
 This is used for all minibuffer input
 except when an alternate history list is specified.")
 
+;; FIXME: this should be a minibuffer-mode slot?
 (defvar *minibuffer-history-position* nil
   "Current position of redoing in the history list.")
 
+;; FIXME: this should be a minibuffer-mode slot?
 (defvar *minibuffer-history-variable* '*minibuffer-history*
   "History list symbol to add minibuffer values to.
 Each string of minibuffer input, as it appears on exit from the minibuffer,
@@ -92,8 +90,13 @@ is added with
 **  (set minibuffer-history-variable
 **  (cons STRING (symbol-value minibuffer-history-variable)))")
 
+;; FIXME: this should be a minibuffer-mode slot?
 (defvar *minibuffer-completion-predicate* nil
   "Within call to `completing-read', this holds the PREDICATE argument.")
+
+(defun minibufferp (&optional (buffer (current-buffer)))
+  ;; FIXME: implement
+  nil)
 
 (defun make-minibuffer (major-mode)
   "Return a fresh minibuffer with major mode, MAJOR-MODE."
@@ -114,7 +117,7 @@ is added with
 			   :bottom-line 0
 			   :point-col 0
 			   :point-line 0
-			   :buffer (make-minibuffer minibuffer-read-mode)
+			   :buffer (make-minibuffer *minibuffer-read-mode*)
 			   :top (make-marker)
 			   :bottom (make-marker)
 			   :bpoint (make-marker)
@@ -315,7 +318,7 @@ one puts point at the beginning of the string.  *Note* that this
 behavior differs from the way such arguments are used in `completing-read'
 and some related functions, which use zero-indexing for POSITION."
   (declare (ignore default-value read keymap))
-  (setup-minibuffer-for-read minibuffer-read-mode prompt initial-contents history))
+  (setup-minibuffer-for-read *minibuffer-read-mode* prompt initial-contents history))
 
 (defun tree-find (tree obj &key (test #'eq))
   "find OBJ in TREE. Return the OBJ or nil."
@@ -495,8 +498,8 @@ DEF, if non-nil, is the default value."
   (let ((*minibuffer-completion-table* table)
 	(*minibuffer-completion-predicate* predicate))
     (setup-minibuffer-for-read (if require-match
-                                   minibuffer-must-match-mode
-                                   minibuffer-complete-mode)
+                                   *minibuffer-must-match-mode*
+                                   *minibuffer-complete-mode*)
                                prompt initial-input history)))
 
 ;; (defun y-or-n-p (prompt)
