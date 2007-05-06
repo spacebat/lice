@@ -193,6 +193,10 @@ to may be nil or omitted; then the substring runs to the end of string.
 from and to start at 0.  If either is negative, it counts from the end.
 
 This function allows vectors as well as strings."
+  (when (< from 0)
+    (setf from (max 0 (+ (length string) from))))
+  (when (< to 0)
+    (setf to (max 0 (+ (length string) to))))
   (subseq string from to))
 
 (depricate memq member)
@@ -202,5 +206,16 @@ Comparison done with `eq'.  The value is actually the tail of LIST
 whose car is ELT."
   (member elt list :test 'eq))
 
+(defun int-to-string (n)
+  "Return the decimal representation of number as a string.
+Uses a minus sign if negative.
+number may be an integer or a floating point number."
+  (check-type n number)
+  (prin1-to-string n))
+
+(defun string-to-char (string)
+  "Convert arg string to a character, the first character of that string.
+A multibyte character is handled correctly."
+  (char string 0))
 
 (provide :lice-0.1/global)

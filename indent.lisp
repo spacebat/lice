@@ -112,6 +112,13 @@ The return value is the current column."
          (pos (point buffer))
          (pos-aref (buffer-char-to-aref buffer pos))
          (end (zv buffer)))
+    ;; If we're starting past the desired column, back up to beginning
+    ;; of line and scan from there.
+    (when (> col column)
+      (setf end pos
+            pos (buffer-beginning-of-line)
+            pos-aref (buffer-char-to-aref buffer pos)
+            col 0))
     ;; FIXME: this assumes each character is 1 column
     (while (and (< col column)
                 (< pos end))

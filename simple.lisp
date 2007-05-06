@@ -525,12 +525,40 @@ To ignore intangibility, bind `inhibit-point-motion-hooks' to t."
                                        (/= arg 1) t nil)))))
 
 
-(defcommand end-of-line ((&optional n)
+(defcommand end-of-line ((&optional (n 1))
                          :prefix)
-  "Move the point to the end of the line in the current buffer."
-  ;; FIXME: handle prefix
-  (declare (ignore n))
-  (setf (marker-position (buffer-point (current-buffer))) (buffer-end-of-line)))
+"Move point to end of current line.
+With argument N not nil or 1, move forward N - 1 lines first.
+If point reaches the beginning or end of buffer, it stops there.
+To ignore intangibility, bind `inhibit-point-motion-hooks' to t.
+
+This function constrains point to the current field unless this moves
+point to a different line than the original, unconstrained result.  If
+N is nil or 1, and a rear-sticky field ends at point, the point does
+not move.  To ignore field boundaries bind `inhibit-field-text-motion'
+to t."
+  (let (newpos)
+    (loop
+       (setf newpos (line-end-position n))
+       (set-point newpos)
+       (cond 
+         ((and (> (point) newpos)
+               (char= (buffer-fetch-char (1- (point)) (current-buffer)) 
+                      #\Newline))
+          ;; If we skipped over a newline that follows an invisible
+          ;; intangible run, move back to the last tangible position
+          ;; within the line.
+          (set-point (1- (point)))
+          (return))
+         ((and (> (point) newpos)
+               (< (point) (zv))
+               (char/= (buffer-fetch-char (point) (current-buffer))
+                       #\Newline))
+          ;; If we skipped something intangible and now we're not
+          ;; really at eol, keep going.
+          (setf n 1))
+         (t (return))))
+    nil))
 
 (defcommand erase-buffer ((&optional (buffer (current-buffer))))
   "Erase the contents of the current buffer."

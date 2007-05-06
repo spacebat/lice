@@ -456,8 +456,10 @@ boundaries bind `inhibit-field-text-motion' to t.
 
 This function does not move point."
   (check-type n integer)
-  (let ((end-pos (buffer-scan-newline (current-buffer) (point) (point-max) (if (<= n 0) (- n 1) n))))
-    (constrain-to-field end-pos (point) nil t nil)))
+  (setf n (- n (if (<= n 0) 1 0)))
+  (let* ((orig (point))
+         (end-pos (find-before-next-newline orig nil n)))
+    (constrain-to-field end-pos orig nil t nil)))
 
 (defun clip-to-bounds (lower num upper)
   (max (min num upper) lower))

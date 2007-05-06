@@ -104,6 +104,7 @@
     (define-key map (kbd "C-j") 'doctor-read-print)
     (define-key map (make-key :char #\Return) 'doctor-ret-or-read)
     (define-key map (kbd "RET") 'doctor-ret-or-read)
+    (define-key map (kbd "C-m") 'doctor-ret-or-read)
     map))
 
 (defvar *doctor-mode*
@@ -912,15 +913,19 @@ Otherwise call the Doctor to parse preceding sentence."
 
 (defun doctor-read-token ()
   "read one word from buffer"
-  (prog1 (intern (downcase (buffer-substring (point)
+  (prog1 (intern (upcase (buffer-substring (point)
 					     (progn
 					       (forward-word 1)
-					       (point)))))
-    (re-search-forward "\\w*"))) ;;"\\Sw*"
+					       (point))))
+                 "LICE")
+    (re-search-forward "\\W*"))) ;;"\\Sw*"
 
 ;; Main processing function for sentences that have been read.
 
+(declaim (special sent))
+
 (defun doctor-doc (sent)
+  ;; Old emacs programs actually depended on dynamic scope!
   (cond
    ((equal sent '(foo))
     (doctor-type '(bar! (doc$ please)(doc$ doc-continue) \.)))
@@ -983,7 +988,9 @@ Otherwise call the Doctor to parse preceding sentence."
 		      (doctor-type '((doc$ whysay) that i shouldn\'t
 				     (cddr sent)
 				     \?))))
-	     (doctor-go (doctor-wherego sent))))))))
+               (progn
+                 (message "HERE")
+	     (doctor-go (doctor-wherego sent)))))))))
 
 ;; Things done to process sentences once read.
 
@@ -1170,12 +1177,12 @@ the subject noun, and return the portion of the sentence following it."
   (let ((foo (doctor-make-string x)))
     (cond ((string-equal (substring foo -1) "s")
 	   (cond ((string-equal (substring foo -2 -1) "s")
-		  (intern (concat foo "es")))
+		  (intern (concat foo "es") "LICE"))
 		 (t x)))
 	   ((string-equal (substring foo -1) "y")
 	    (intern (concat (substring foo 0 -1)
-			    "ies")))
-	   (t (intern (concat foo "s"))))))
+			    "ies") "LICE"))
+	   (t (intern (concat foo "s") "LICE")))))
 
 (defun doctor-setprep (sent key)
   (let ((val)
@@ -1439,7 +1446,8 @@ Hack on previous word, setting global variable OWNER to correct result."
 	((and (atom str1)
 	      (atom str2))
 	 (intern (concat (doctor-make-string str1)
-			 (doctor-make-string str2))))
+			 (doctor-make-string str2))
+                 "LICE"))
 	(t nil)))
 
 (defun doctor-make-string (obj)
@@ -1465,7 +1473,7 @@ Hack on previous word, setting global variable OWNER to correct result."
 
 (defun doctor-go (destination)
   "Call a `doctor-*' function."
-  (funcall (intern (concat "DOCTOR-" (doctor-make-string destination)))))
+  (funcall (intern (concat "DOCTOR-" (doctor-make-string destination)) "LICE")))
 
 (defun doctor-desire1 ()
   (doctor-go (doc$ whereoutp)))

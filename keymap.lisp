@@ -249,6 +249,8 @@ more."
     (define-key kmap (make-key :char #\e :control t :meta t) 'end-of-defun)
     (define-key kmap (make-key :char #\_ :control t) 'undo)
     (define-key kmap (make-key :char #\/ :control t) 'undo)
+    (define-key kmap (make-key :char #\} :meta t) 'forward-paragraph)
+    (define-key kmap (make-key :char #\{ :meta t) 'backward-paragraph)
     (define-key kmap (make-key :char #\x :control t) ctl-x-prefix)
     (define-key kmap (make-key :char #\c :control t) ctl-c-prefix)
     (define-key kmap (make-key :char #\h :control t) ctl-h-prefix)

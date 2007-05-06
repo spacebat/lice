@@ -787,6 +787,70 @@ before the text."
   ;; debugging
   (fill-gap buf))
 
+(defun scan-buffer (buffer target start end count)
+"Search for COUNT instances of the character TARGET between START and END.
+
+If COUNT is positive, search forwards; END must be >= START.
+If COUNT is negative, search backwards for the -COUNTth instance;
+   END must be <= START.
+If COUNT is zero, do anything you please; run rogue, for all I care.
+
+If END is NIL, use BEGV or ZV instead, as appropriate for the
+direction indicated by COUNT.
+
+If we find COUNT instances, return the
+position past the COUNTth match and 0.  Note that for reverse motion
+this is not the same as the usual convention for Emacs motion commands.
+
+If we don't find COUNT instances before reaching END, return END
+and the number of TARGETs left unfound."
+  (let ((shortage (abs count))
+        last)
+    (if (> count 0)
+        (setf end (or end (zv buffer)))
+        (setf end (or end (begv buffer))))
+    (setf start (buffer-char-to-aref buffer start)
+          end (buffer-char-to-aref buffer end))
+    (loop while (and (> count 0)
+                     (/= start end)) do
+         (setf start
+               (if (< start (buffer-gap-start buffer))
+                   (or (position target (buffer-data buffer) :start start :end (min end (buffer-gap-start buffer)))
+                       (and (> end (gap-end buffer))
+                            (position target (buffer-data buffer) :start (gap-end buffer) :end end)))
+                   (position target (buffer-data buffer) :start start :end end)))
+         (if start
+             (setf start (1+ start)
+                   last start
+                   count (1- count)
+                   shortage (1- shortage))
+             (setf start end)))
+    (loop while (and (< count 0)
+                     (/= start end)) do
+         (setf start
+               (if (> start (buffer-gap-start buffer))
+                   (or (position target (buffer-data buffer) :start (max end (gap-end buffer)) :end start :from-end t)
+                       (and (< end (buffer-gap-start buffer))
+                            (position target (buffer-data buffer) :start end :end (buffer-gap-start buffer) :from-end t)))
+                   (position target (buffer-data buffer) :start end :end start :from-end t)))
+         (if start
+             (setf last (+ start 1) ; match emacs functionality
+                   count (1+ count)
+                   shortage (1- shortage))
+             (setf start end)))
+    (if (zerop count)
+        (values (and last (buffer-aref-to-char buffer last)) 0)
+        (values (buffer-aref-to-char buffer end) shortage))))
+
+(defun find-before-next-newline (from to cnt)
+  "Like find_next_newline, but returns position before the newline,
+not after, and only search up to TO.  This isn't just
+find_next_newline (...)-1, because you might hit TO."
+  (multiple-value-bind (pos shortage) (scan-buffer (current-buffer) #\Newline from to cnt)
+    (when (zerop shortage)
+      (decf pos))
+    pos))
+
 (defun buffer-scan-newline (buf start limit count)
   "Search BUF for COUNT newlines with a limiting point at LIMIT,
 starting at START. Returns the point of the last newline or limit and

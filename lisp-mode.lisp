@@ -387,16 +387,15 @@ is called as a function to find the defun's beginning."
         (when (and (< arg 0) 
                    (not (eobp)))
           (forward-char 1))
-        (let ((mdata (if *defun-prompt-regexp*
-                         (re-search-backward (concat (if *open-paren-in-column-0-is-defun-start*
-                                                         "^\\(|" "")
-                                                     "(?:" *defun-prompt-regexp* ")\\(")
-                                             :error 'move :count (or arg 1))
-                         (search-backward (format nil "~%(") ;; FIXME: doesn't match beginning of buffer
-                                          :error 'move :count (or arg 1))))) ;; used to be ^\\(
-          (when mdata
-            (goto-char (1- (match-end mdata 0)))
-            t)))))
+        (with-match-data
+            (and (if *defun-prompt-regexp*
+                     (re-search-backward (concat (if *open-paren-in-column-0-is-defun-start*
+                                                     "^\\(|" "")
+                                                 "(?:" *defun-prompt-regexp* ")\\(")
+                                         :error 'move :count (or arg 1))
+                     (search-backward (format nil "~%(") ;; FIXME: doesn't match beginning of buffer
+                                      :error 'move :count (or arg 1))) ;; used to be ^\\(
+                 (progn (goto-char (1- (match-end 0))) t))))))
 
 (defcommand beginning-of-defun ((&optional (arg 1))
                                 :prefix)

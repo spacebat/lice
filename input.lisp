@@ -140,13 +140,14 @@ events that invoked the current command."
               ;; let the user break out of this stuff
               (let ((*waiting-for-input* nil))
                 (dispatch-processes procs)
-                (frame-render (selected-frame)))))
-       ;; FIXME: Yes, I'd love to be able to sleep until there was
-       ;; activity on one of the streams lice is waiting for input on
-       ;; but i don't know how to do that. So just sleep for a tiny
-       ;; bit to pass control over to the operating system and then
-       ;; check again.
-       (sleep 0.01))))
+                (frame-render (selected-frame))))
+             (t
+              ;; FIXME: Yes, I'd love to be able to sleep until there was
+              ;; activity on one of the streams lice is waiting for input on
+              ;; but i don't know how to do that. So just sleep for a tiny
+              ;; bit to pass control over to the operating system and then
+              ;; check again.
+              (sleep 0.01))))))
 
 ;; This is really TTY specific
 (defun next-event ()

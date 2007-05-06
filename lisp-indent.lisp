@@ -126,6 +126,7 @@ If nil, indent backquoted lists as data, i.e., like quoted lists."
 
 
 (defun common-lisp-indent-function-1 (indent-point state)
+  (with-match-data
   (let ((normal-indent (current-column)))
     ;; Walk up list levels until we see something
     ;;  which does special things with subforms.
@@ -278,7 +279,7 @@ If nil, indent backquoted lists as data, i.e., like quoted lists."
 		(progn (backward-up-list 1)
 		       (setq depth (1+ depth)))
 	      (error () (setq depth lisp-indent-maximum-backtracking))))))
-      (or calculated tentative-calculated))))
+      (or calculated tentative-calculated)))))
 
 
 (defun common-lisp-indent-call-method (function method path state indent-point

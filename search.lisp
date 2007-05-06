@@ -6,7 +6,22 @@
 (defstruct match-data
   obj start end reg-starts reg-ends)
 
-(defun match-end (data idx)
+(defvar *match-data* nil
+  "store the match data for searches.")
+
+(defvar *with-match-data* nil
+  "Set to true when inside a match-data block. If this is NIL
+during one of the searches, a warning is signaled because it's
+not thread safe. But, lots of code uses the search functions so
+it's useful, at least now to be compatible with gnu emacs, even
+if it's not thread safe. Never set this variable directly.")
+
+(defmacro with-match-data (&body body)
+  `(let ((*with-match-data* t)
+         (*match-data* nil))
+     ,@body))
+
+(defun match-end (idx &optional (data *match-data*))
   "Return position of start of text matched by last search.
 SUBEXP, a number, specifies which parenthesized expression in the last
   regexp.
@@ -17,7 +32,7 @@ Zero means the entire text matched by the whole regexp or whole string."
       (match-data-end data)
       (aref (match-data-reg-ends data) (1- idx))))
 
-(defun match-beginning (data idx)
+(defun match-beginning (idx &optional (data *match-data*))
   "Return position of start of text matched by last search.
 SUBEXP, a number, specifies which parenthesized expression in the last
   regexp.
@@ -32,7 +47,16 @@ Zero means the entire text matched by the whole regexp or whole string."
 (define-condition search-failed (lice-condition)
   () (:documentation "raised when a search failed to match"))
 
+(define-condition thread-unsafe (style-warning)
+  () (:documentation "Raised when a search is not threadsafe. See also `*with-match-data*'"))
+
+(defun check-search-thread-safe ()
+  "Report a warning if the search is unsafe for threads."
+  (unless *with-match-data*
+    (signal 'thread-unsafe)))
+
 (defun string-search-command (string bound error count direction)
+  (check-search-thread-safe)
   (gap-move-to (current-buffer) (buffer-point-aref (current-buffer)))
   ;; normalize vars
   (setf count (* count direction)
@@ -66,11 +90,13 @@ Zero means the entire text matched by the whole regexp or whole string."
           (if (minusp count)
               (goto-char (+ (buffer-aref-to-char buffer pos) (length string)))
               (goto-char (buffer-aref-to-char buffer pos)))
-          (make-match-data :obj buffer
-                           :start (buffer-aref-to-char buffer pos)
-                           :end (+ (buffer-aref-to-char buffer pos) (length string))
-                           :reg-starts #()
-                           :reg-ends #())))))
+          (values (point)
+                  (setf *match-data*
+                        (make-match-data :obj buffer
+                                         :start (buffer-aref-to-char buffer pos)
+                                         :end (+ (buffer-aref-to-char buffer pos) (length string))
+                                         :reg-starts #()
+                                         :reg-ends #())))))))
 
 (defun search-forward (string &key bound (error t) (count 1))
   "Search forward from point for string.
@@ -103,8 +129,12 @@ Search case-sensitivity is determined by the value of the variable
 See also the functions `match-beginning', `match-end' and `replace-match'."
   (string-search-command string bound error count -1))
 
+;; TODO: create compiler-macros for regex functions so the regexps can
+;; be compiled at compile time.
+
 (defun looking-at (regexp &optional (buffer (current-buffer)))
   "Return the match-data if text after point matches regular expression regexp."
+  (check-search-thread-safe)
   ;; get the gap outta the way. It sucks we have to do this. Really we
   ;; should modify ppcre to generate scanner functions that hop the
   ;; gap. Meantime...
@@ -112,18 +142,22 @@ See also the functions `match-beginning', `match-end' and `replace-match'."
 	   (buffer-gap-start buffer))
     (gap-move-to-point buffer))
   (multiple-value-bind (start end reg-starts reg-ends)
-      (ppcre:scan regexp (buffer-data buffer) :start (buffer-char-to-aref buffer (point buffer)))
+      (ppcre:scan (ppcre:create-scanner regexp :multi-line-mode t) (buffer-data buffer) 
+                  :start (buffer-char-to-aref buffer (point buffer))
+                  :real-start-pos 0)
     (when (and start
 	       (= start (buffer-char-to-aref buffer (point buffer))))
-      (make-match-data :obj buffer
-		       :start (buffer-aref-to-char buffer start)
-		       :end (buffer-aref-to-char buffer end)
-		       :reg-starts (map 'vector (lambda (n)
-                                                  (buffer-aref-to-char buffer n))
-                                        reg-starts)
-		       :reg-ends (map 'vector (lambda (n)
-                                                (buffer-aref-to-char buffer n))
-                                      reg-ends)))))
+      (values t
+              (setf *match-data*
+                    (make-match-data :obj buffer
+                                     :start (buffer-aref-to-char buffer start)
+                                     :end (buffer-aref-to-char buffer end)
+                                     :reg-starts (map 'vector (lambda (n)
+                                                                (buffer-aref-to-char buffer n))
+                                                      reg-starts)
+                                     :reg-ends (map 'vector (lambda (n)
+                                                              (buffer-aref-to-char buffer n))
+                                                    reg-ends)))))))
 
 (defun re-search-forward (regexp &key (bound (zv)) (error t) count &aux (buffer (current-buffer)))
   "Search forward from point for regular expression regexp.
@@ -136,24 +170,28 @@ COUNT is repeat count--search for successive occurrences.
 See also the functions `match-beginning', `match-end', `match-string',
 and `replace-match'."
   (declare (ignore count))
+  (check-search-thread-safe)
   (when (< (buffer-char-to-aref buffer (point buffer))
 	   (buffer-gap-start buffer))
     (gap-move-to-point buffer))
   (multiple-value-bind (start end reg-starts reg-ends)
-      (ppcre:scan regexp (buffer-data buffer)
+      (ppcre:scan (ppcre:create-scanner regexp :multi-line-mode t) (buffer-data buffer)
                   :start (buffer-char-to-aref buffer (point buffer)) 
-                  :end (buffer-char-to-aref buffer bound))
+                  :end (buffer-char-to-aref buffer bound)
+                  :real-start-pos 0)
     (cond (start
-	   (goto-char (buffer-aref-to-char buffer start) buffer)
-	   (make-match-data :obj buffer
-                            :start (buffer-aref-to-char buffer start)
-                            :end (buffer-aref-to-char buffer end)
-                            :reg-starts (map 'vector (lambda (n)
-                                                       (buffer-aref-to-char buffer n))
-                                             reg-starts)
-                            :reg-ends (map 'vector (lambda (n)
-                                                     (buffer-aref-to-char buffer n))
-                                           reg-ends)))
+	   (goto-char (buffer-aref-to-char buffer end) buffer)
+           (values (point)
+                   (setf *match-data*
+                         (make-match-data :obj buffer
+                                          :start (buffer-aref-to-char buffer start)
+                                          :end (buffer-aref-to-char buffer end)
+                                          :reg-starts (map 'vector (lambda (n)
+                                                                     (buffer-aref-to-char buffer n))
+                                                           reg-starts)
+                                          :reg-ends (map 'vector (lambda (n)
+                                                                   (buffer-aref-to-char buffer n))
+                                                         reg-ends)))))
 	  ((eq error t)
 	   (signal 'search-failed))
 	  ((null error)
@@ -176,6 +214,7 @@ COUNT is repeat count--search for successive occurrences.
 See also the functions `match-beginning', `match-end', `match-string',
 and `replace-match'."
   (declare (ignore count))
+  (check-search-thread-safe)
   ;;(message "re-search-backward ~s ~d" regexp (point))
   (when (> (buffer-gap-start buffer)
            (buffer-char-to-aref buffer (point buffer)))
@@ -184,32 +223,34 @@ and `replace-match'."
   (let* ((start-aref (buffer-char-to-aref buffer (point buffer)))
          (pt-aref start-aref)
          (stop (buffer-char-to-aref buffer bound))
-         (scanner (ppcre:create-scanner regexp)))
+         (scanner (ppcre:create-scanner regexp :multi-line-mode t)))
     (loop
        (multiple-value-bind (start end reg-starts reg-ends)
-           (ppcre:scan scanner (buffer-data buffer) :start start-aref :end pt-aref)
+           (ppcre:scan scanner (buffer-data buffer) :start start-aref :end pt-aref :real-start-pos 0)
          (when start
            (goto-char (buffer-aref-to-char buffer start) buffer)
-           (return (make-match-data :obj buffer
-                                    :start (buffer-aref-to-char buffer start)
-                                    :end (buffer-aref-to-char buffer end)
-                                    :reg-starts (map 'vector (lambda (n)
-                                                               (buffer-aref-to-char buffer n))
-                                                     reg-starts)
-                                    :reg-ends (map 'vector (lambda (n)
-                                                             (buffer-aref-to-char buffer n))
-                                                   reg-ends))))
+           (return (values (point)
+                           (setf *match-data*
+                                 (make-match-data :obj buffer
+                                                  :start (buffer-aref-to-char buffer start)
+                                                  :end (buffer-aref-to-char buffer end)
+                                                  :reg-starts (map 'vector (lambda (n)
+                                                                             (buffer-aref-to-char buffer n))
+                                                                   reg-starts)
+                                                  :reg-ends (map 'vector (lambda (n)
+                                                                           (buffer-aref-to-char buffer n))
+                                                                 reg-ends))))))
          (dec-aref start-aref buffer)
          (when (< start-aref stop)
            (cond ((eq error t)
                   ;; FIXME: we need a search condition
                   (signal 'search-failed))
                  ((null error)
-                  (return-from re-search-backward nil))
+                  (return nil))
                  (t
                   (when bound
                     (goto-char bound buffer))
-                  (return-from re-search-backward nil))))))))
+                  (return nil))))))))
 
 (defun string-match (regexp string &key (start 0) (end (length string)))
   "Return index of start of first match for regexp in string and match-data, or nil.
@@ -222,15 +263,18 @@ END, end search at that index in string.
 
 You can use the function `match-string' to extract the substrings
 matched by the parenthesis constructions in regexp."
+  (check-search-thread-safe)
   (multiple-value-bind (start end reg-starts reg-ends)
-      (ppcre:scan regexp string :start start :end end)
+      (ppcre:scan (ppcre:create-scanner regexp :multi-line-mode t)
+                  string :start start :end end)
     (when start
       (values start
-	      (make-match-data :obj string
-			       :start start
-			       :end end
-			       :reg-starts reg-starts
-			       :reg-ends reg-ends)))))
+              (setf *match-data*
+                    (make-match-data :obj string
+                                     :start start
+                                     :end end
+                                     :reg-starts reg-starts
+                                     :reg-ends reg-ends))))))
 
 (defun regexp-quote (string)
   "Return a regexp string which matches exactly STRING and nothing else."
@@ -241,4 +285,3 @@ matched by the parenthesis constructions in regexp."
       collect #\\
       collect c)
    'string))
-  
