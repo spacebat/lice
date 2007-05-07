@@ -896,12 +896,12 @@ Otherwise call the Doctor to parse preceding sentence."
 
 (defcommand doctor-read-print ()
   "top level loop"
-  (let ((sent (doctor-readin)))
-    (insert "\n")
-    (setq lincount (1+ lincount))
-    (doctor-doc sent)
-    (insert "\n")
-    (setq bak sent)))
+  (setf sent (doctor-readin))
+  (insert "\n")
+  (setq lincount (1+ lincount))
+  (doctor-doc)
+  (insert "\n")
+  (setq bak sent))
 
 (defun doctor-readin nil
   "Read a sentence.  Return it as a list of words."
@@ -924,7 +924,7 @@ Otherwise call the Doctor to parse preceding sentence."
 
 ;;(declaim (special sent))
 
-(defun doctor-doc (sent)
+(defun doctor-doc ()
   ;; Old emacs programs actually depended on dynamic scope!
   (cond
    ((equal sent '(foo))

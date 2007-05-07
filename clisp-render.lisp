@@ -131,7 +131,7 @@ the text properties present."
 		(clear-to-eol i 0 w frame)))))
     ;; Update the mode-line if it exists. FIXME: Not the right place
     ;; to update the mode-line.
-    (when (buffer-mode-line (window-buffer w))
+    (when (buffer-local '*mode-line-format* (window-buffer w))
       (update-mode-line (window-buffer w))
       (putstr (truncate-mode-line (window-buffer w) (window-width w))
 	      0 (window-height w nil) w frame)
@@ -145,22 +145,19 @@ the text properties present."
 ;;; keyboard stuff
 
 (defmethod frame-read-event ((frame clisp-frame))
-  (let* ((input (read-char EXT:*KEYBOARD-INPUT*));; (input (screen::read-keyboard-char (frame-window-stream frame)))
-	 (ch (if (sys::input-character-char input) 
-				 (char-downcase (sys::input-character-char input))
-			       (char-downcase (sys::input-character-key input))))
-	 meta)
+  (let* ((input (read-char EXT:*KEYBOARD-INPUT*)) ;; (input (screen::read-keyboard-char (frame-window-stream frame)))
+	 (ch (code-char (logand (char-code (or (ext:char-key input) (character input)))
+                                (lognot 128))))
+         (meta (= (logand (char-code (or (ext:char-key input) (character input))) 128) 128)))
     (when (and (characterp ch)
 	       (char= ch #\Escape))
       (setf input (read-char EXT:*KEYBOARD-INPUT*)
 	    meta t))
     (make-instance 'key
-		   :char (if (sys::input-character-char input) 
-			     (char-downcase (sys::input-character-char input))
-			   (char-downcase (sys::input-character-key input)))
-		   :control (sys::char-bit input :control)
+		   :char ch
+		   :control (ext:char-bit input :control)
 		   :meta (or meta
-			     (sys::char-bit input :meta)))))
+                             (ext:char-bit input :meta)))))
 
 ;;; some frame stuff
 

@@ -23,7 +23,7 @@
 	       (when (key-hyper key) "H-")))
 
 (defun print-key (key)
-  (format nil "~a~a" (print-mods key) (or (char-name (key-char key)) (key-char key))))
+  (format nil "~a~a" (print-mods key) (key-char key)))
 
 (defmethod print-object ((obj key) stream)
   (print-unreadable-object (obj stream :type t :identity t)

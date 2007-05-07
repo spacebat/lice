@@ -5,7 +5,7 @@
 (load "package.lisp")
 
 (defsystem :lice 
-  :depends-on (cl-ncurses cl-ppcre)
+  :depends-on (#-clisp cl-ncurses cl-ppcre)
   :components ((:file "wrappers")
 	       (:file "global")
 	       (:file "custom")
@@ -38,12 +38,13 @@
 	       (:file "files" :depends-on ("buffer" "buffer-local" "commands" "custom"))
 	       (:file "help" :depends-on ("buffer" "commands"))
 	       (:file "debug" :depends-on ("buffer" "commands"))
-	       (:file "tty-render" :depends-on ("buffer" "window" "frame" "render"))
-	       (:file "main" :depends-on ("buffer" "major-mode" "tty-render"))
+	       #+sbcl (:file "tty-render" :depends-on ("buffer" "window" "frame" "render"))
+               #+clisp (:file "clisp-render" :depends-on ("buffer" "window" "frame" "render"))
+	       (:file "main" :depends-on ("buffer" "major-mode" #+sbcl "tty-render" #+clisp "clisp-render"))
                ;; the following are files outside of lice-base
 	       (:file "subr" :depends-on ("commands" "buffer"))
-	       (:file "simple" :depends-on ("subr" "commands" "keymap" "major-mode" "custom"))
-	       (:file "indent" :depends-on ("subr" "simple"))
+	       (:file "simple" :depends-on ("subr" "commands" "keymap" "major-mode" "custom" "editfns"))
+	       (:file "indent" :depends-on ("subr" "simple" "editfns"))
 	       (:file "lisp-mode" :depends-on ("indent" "simple"))
 	       (:file "lisp-indent" :depends-on ("lisp-mode" "indent" "simple"))
                (:file "paragraphs" :depends-on ("simple"))

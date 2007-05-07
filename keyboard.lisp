@@ -79,27 +79,30 @@ events that invoked the current command."
 ;; This is really TTY specific
 (defun next-event ()
   (let* ((*current-event* (if *unread-command-events*
-			      (pop *unread-command-events*)
-			      (wait-for-event)))
-	 (def (if *current-kmap*
-		  (lookup-key *current-kmap* *current-event* t)
-		;; no current kmap? 
-		(or 
-		 (when *overriding-terminal-local-map* 
-		   (lookup-key-internal *overriding-terminal-local-map* *current-event* t *current-keymap-theme* t))
-		 (when *overriding-local-map* 
-		   (lookup-key-internal *overriding-local-map* *current-event* t *current-keymap-theme* t))
-                 (when (current-local-map)
-                   (lookup-key-internal (current-local-map) *current-event* t *current-keymap-theme* t))
-                 ;;(lookup-key-internal (major-mode-map (major-mode)) *current-event* t *current-keymap-theme* t)
-                 ;; TODO: minor mode maps
-		 ;; check the global map
-		 (lookup-key-internal *global-map* *current-event* t *current-keymap-theme* t)))))
+                              (pop *unread-command-events*)
+                              (wait-for-event)))
+         (def (if *current-kmap*
+                  (lookup-key-internal *current-kmap* *current-event* t *current-keymap-theme* t)
+                  ;; no current kmap? 
+                  (or 
+                   (when *overriding-terminal-local-map* 
+                     (lookup-key-internal *overriding-terminal-local-map* *current-event* t *current-keymap-theme* t))
+                   (when *overriding-local-map* 
+                     (lookup-key-internal *overriding-local-map* *current-event* t *current-keymap-theme* t))
+                   (when (current-local-map)
+                     (lookup-key-internal (current-local-map) *current-event* t *current-keymap-theme* t))
+                   ;;(lookup-key-internal (major-mode-map (major-mode)) *current-event* t *current-keymap-theme* t)
+                   ;; TODO: minor mode maps
+                   ;; check the global map
+                   (lookup-key-internal *global-map* *current-event* t *current-keymap-theme* t)))))
     (dformat +debug-v+ "~a ~s ~a~%"
 	     def #|(key-hashid *current-event*)|# *current-event* (key-char *current-event*))
     (if def
 	(handle-key-binding def *current-event*)
-      (message "~{~a ~}is undefined" (mapcar 'print-key (cons *current-event* (this-command-keys)))))))
+        (progn
+          (message "~{~a ~}is undefined" (mapcar 'print-key (reverse (cons *current-event* (this-command-keys)))))
+          (setf *this-command-keys* nil)
+          (throw :unbound-key nil)))))
 
 (defgeneric handle-key-binding (binding key-seq))
 
@@ -157,6 +160,7 @@ events that invoked the current command."
   ;; command is dispatched. Otherwise, calls to set-buffer
   ;; would stick.
   (setf *current-buffer* (window-buffer (frame-selected-window (selected-frame))))
-  (next-event))
+  (catch :unbound-key
+    (next-event)))
 
 (provide :lice-0.1/input)

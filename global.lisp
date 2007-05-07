@@ -238,8 +238,8 @@ Modifies the match data; use `save-match-data' if necessary."
 
 (defun memoize-store (state thing value)
   (incf (memoize-state-pt state))
-  (when (> (memoize-state-pt state) 
-           (length (memoize-state-data state)))
+  (when (>= (memoize-state-pt state) 
+            (length (memoize-state-data state)))
     (setf (memoize-state-pt state) 0))
   (setf (svref (memoize-state-data state) (memoize-state-pt state)) (cons thing value))
   value)

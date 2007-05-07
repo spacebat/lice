@@ -356,6 +356,7 @@ or after.  On return global syntax data is good for lookup at CHAR-POS."
     quoted))
 
 (defstruct parse-state
+  buffer
   depth min-depth
   this-level-start
   prev-level-start
@@ -401,7 +402,7 @@ update the global data."
     ;; Return what we found
     (make-parse-state :start-value pt
                       :start-value-aref pt-aref
-                      :start-buffer buffer
+                      :buffer buffer
                       ;; :modiff MODIFF
                       :start-begv (begv buffer)
                       :start-pos pos)))
@@ -957,8 +958,8 @@ If successful, return the charpos of the comment's beginning, and the aref pos.
         comment-start-aref
         ;; Place where the containing defun starts,
         ;; or nil if we didn't come across it yet. 
-        defun-start
-        defun-start-aref
+        (defun-start 0)
+        (defun-start-aref 0)
         code
         (nesting 1) ; current comment nesting
         ch
@@ -1072,7 +1073,7 @@ If successful, return the charpos of the comment's beginning, and the aref pos.
                              comment-start-aref from-aref)
                        (progn
                          (decf nesting)
-                         (when (<= nesting)
+                         (when (<= nesting 0)
                            ;; nested comments have to be balanced, so we don't need to
                            ;; keep looking for earlier ones.  We use here the same (slightly
                            ;; incorrect) reasoning as below:  since it is followed by uniform
