@@ -2,7 +2,6 @@
 #+sbcl
 (progn
   (require 'asdf)
-  (load "lice.asd")
   (require 'lice))
 #+sbcl 
 (sb-ext:save-lisp-and-die "lice" :toplevel (lambda ()
