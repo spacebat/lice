@@ -1,6 +1,6 @@
 ;;; implentation of an interval tree
 
-(in-package :lice)
+(in-package "LICE")
 
 (defvar *text-property-default-nonsticky* nil
   "Alist of properties vs the corresponding non-stickinesses.
@@ -32,36 +32,6 @@ character that does not have its own value for that property.")
        (let ((,sym (car ,csym))
 	     (,val (cadr ,csym)))
 	 ,@body))))
-
-;; interval node is a list: (key left right &rest plist)
-
-(defun print-interval (i s d)
-  (declare (ignore d))
-  (format s "#S(interval ~s ~s ~s | ~s ~s)" 
-	  (interval-pt i)
-	  (interval-length i)
-	  (interval-plist i)
-	  (interval-left i)
-	  (interval-right i)))
-
-(defstruct (interval
-	    (:print-function print-interval))
-  (pt nil)
-  (length nil)
-  (left nil)
-  (right nil)
-  (parent nil :type (or null pstring buffer interval))
-  (plist nil :type list))
-
-;; MOVITZ's defstruct doesn't create copy-interval 
-#+movitz
-(defun copy-interval (interval)
-  (make-interval :pt (interval-pt interval)
-		 :length (interval-length interval)
-		 :left (interval-left interval)
-		 :right (interval-right interval)
-		 :parent (interval-parent interval)
-		 :plist (interval-plist interval)))
 
 (defun interval-has-object (interval)
   (and (interval-parent interval)
@@ -128,6 +98,186 @@ We check for direct properties, for categories with property PROP,
 and for PROP appearing on the default-text-properties list."
   (lookup-char-property plist sym t))
 	     
+(defun total-length (root)
+  "TOTAL_LENGTH"
+  (if root
+      (interval-length root)
+    0))
+
+(defun left-total-length (root)
+  (if (interval-left root)
+      (interval-length (interval-left root))
+    0))
+
+(defun right-total-length (root)
+  (if (interval-right root)
+      (interval-length (interval-right root))
+    0))
+
+(defun interval-text-length (root)
+  "The size of text represented by this interval alone. LENGTH."
+  (if root
+      (- (total-length root)
+	 (total-length (interval-right root))
+	 (total-length (interval-left root)))
+    0))
+
+(defun right-child-p (root)
+  (eq root (interval-right (interval-parent root))))
+
+(defun left-child-p (root)
+  (eq root (interval-left (interval-parent root))))
+
+(defun interval-past-top-p (interval)
+  "Return t if INTERVAL is not an interval. Used to check when we've
+climbed past the root interval."
+  (not (typep (interval-parent interval) 'interval)))
+
+(defun root-interval-p (i)
+  "Return true if i is the root interval node."
+  (or (null (interval-parent i))
+      (not (typep (interval-parent i) 'interval))))
+
+(defun root-interval (interval)
+  "Return the root of interval."
+  (do ((i interval (interval-parent i)))
+      ((root-interval-p i) i)))
+
+(defun leaf-interval-p (i)
+  "Return T if this interval has no children."
+  (and (null (interval-left i))
+       (null (interval-right i))))
+
+(defun only-interval-p (i)
+  "Return T if this interval is the only interval in the interval tree."
+  (and (root-interval-p i)
+       (leaf-interval-p i)))
+
+(defun default-interval-p (i)
+  (or (null i)
+      (null (interval-plist i))))
+
+(defun rotate-left (interval)
+"Assuming that a right child exists, perform the following operation:
+
+    A               B
+   / \	           / \
+      B	   =>     A
+     / \         / \
+    c               c
+"
+  (let ((old-total (interval-length interval))
+	(b (interval-right interval))
+	i)
+    ;; Change interval's parent to point b.
+    (unless (root-interval-p interval)
+      (if (left-child-p interval)
+	  (setf (interval-left (interval-parent interval)) b)
+	(setf (interval-right (interval-parent interval)) b)))
+    (setf (interval-parent b) (interval-parent interval))
+    ;; Make b the parent of a
+    (setf i (interval-left b)
+	  (interval-left b) interval
+	  (interval-parent interval) b)
+    ;; make a point to c
+    (setf (interval-right interval) i)
+    (when i
+      (setf (interval-parent i) interval))
+    ;; A's total length is decreased by the length of B and its left child.
+    (decf (interval-length interval) (- (interval-length b)
+				    (right-total-length interval)))
+    (check-total-length interval)
+    ;; B must have the same total length of A.
+    (setf (interval-length b) old-total)
+    (check-total-length b)
+    b))
+
+(defun rotate-right (interval)
+"Assuming that a left child exists, perform the following operation:
+
+     A		  B
+    / \		 / \
+   B       =>       A
+  / \		   / \
+     c		  c
+"
+  (let ((old-total (interval-length interval))
+	(b (interval-left interval))
+	i)
+    ;; Change interval's parent to point b.
+    (unless (root-interval-p interval)
+      (if (left-child-p interval)
+	  (setf (interval-left (interval-parent interval)) b)
+	(setf (interval-right (interval-parent interval)) b)))
+    (setf (interval-parent b) (interval-parent interval))
+    ;; Make b the parent of a
+    (setf i (interval-right b)
+	  (interval-right b) interval
+	  (interval-parent interval) b)
+    ;; make a point to c
+    (setf (interval-left interval) i)
+    (when i
+      (setf (interval-parent i) interval))
+    ;; A's total length is decreased by the length of B and its left child.
+    (decf (interval-length interval) (- (interval-length b)
+				    (left-total-length interval)))
+    (check-total-length interval)
+    ;; B must have the same total length of A.
+    (setf (interval-length b) old-total)
+    (check-total-length b)
+    b))
+
+(defun balance-an-interval (i)						 
+  (let (old-diff
+	new-diff)
+    (loop
+     (setf old-diff (- (left-total-length i) (right-total-length i)))
+     (cond ((> old-diff 0)
+	    ;; Since the left child is longer, there must be one.
+	    (setf new-diff (+ (- (interval-length i) 
+				 (interval-length (interval-left i)))
+			      (- (right-total-length (interval-left i))
+				 (left-total-length (interval-left i)))))
+	    (when (>= (abs new-diff) old-diff)
+	      (return-from balance-an-interval i))
+	    (setf i (rotate-right i))
+	    (balance-an-interval (interval-right i)))
+	   ((< old-diff 0)
+	    (setf new-diff (+ (- (interval-length i) 
+				 (interval-length (interval-right i)))
+			      (- (left-total-length (interval-right i))
+				 (right-total-length (interval-right i)))))
+	    (when (>= (abs new-diff) (- old-diff))
+	      (return-from balance-an-interval i))
+	    (setf i (rotate-left i))
+	    (balance-an-interval (interval-left i)))
+	   (t (return-from balance-an-interval i))))))
+
+(defun balance-intervals (tree)
+  "Balance the interval tree TREE. Balancing is by weight: the amount
+of text."
+  (labels ((balance (tree)
+             (when (interval-left tree)
+	       (balance (interval-left tree)))
+	     (when (interval-right tree)
+	       (balance (interval-right tree)))
+	     (balance-an-interval tree)))
+    (when tree
+      (balance tree))))
+
+(defun balance-possible-root-interval (interval)
+  (let ((has-parent nil)
+	parent)
+  (when (null (interval-parent interval))
+    (return-from balance-possible-root-interval interval))
+  (when (interval-has-object interval)
+    (setf parent (interval-parent interval)
+	  has-parent t))
+  (setf interval (balance-intervals interval))
+  (when has-parent
+    (setf (intervals parent) interval))
+  interval))
+
 (defun split-interval-left (interval offset)
   (let* ((new-length offset)
 	 (new (make-interval :pt (interval-pt interval)
@@ -170,162 +320,6 @@ and for PROP appearing on the default-text-properties list."
 	(check-total-length new)))
     (balance-possible-root-interval interval)
     new))
-
-(defun right-child-p (root)
-  (eq root (interval-right (interval-parent root))))
-
-(defun left-child-p (root)
-  (eq root (interval-left (interval-parent root))))
-
-(defun interval-past-top-p (interval)
-  "Return t if INTERVAL is not an interval. Used to check when we've
-climbed past the root interval."
-  (not (typep (interval-parent interval) 'interval)))
-
-(defun rotate-right (interval)
-"Assuming that a left child exists, perform the following operation:
-
-     A		  B
-    / \		 / \
-   B       =>       A
-  / \		   / \
-     c		  c
-"
-  (let ((old-total (interval-length interval))
-	(b (interval-left interval))
-	i)
-    ;; Change interval's parent to point b.
-    (unless (root-interval-p interval)
-      (if (left-child-p interval)
-	  (setf (interval-left (interval-parent interval)) b)
-	(setf (interval-right (interval-parent interval)) b)))
-    (setf (interval-parent b) (interval-parent interval))
-    ;; Make b the parent of a
-    (setf i (interval-right b)
-	  (interval-right b) interval
-	  (interval-parent interval) b)
-    ;; make a point to c
-    (setf (interval-left interval) i)
-    (when i
-      (setf (interval-parent i) interval))
-    ;; A's total length is decreased by the length of B and its left child.
-    (decf (interval-length interval) (- (interval-length b)
-				    (left-total-length interval)))
-    (check-total-length interval)
-    ;; B must have the same total length of A.
-    (setf (interval-length b) old-total)
-    (check-total-length b)
-    b))
-
-(defun rotate-left (interval)
-"Assuming that a right child exists, perform the following operation:
-
-    A               B
-   / \	           / \
-      B	   =>     A
-     / \         / \
-    c               c
-"
-  (let ((old-total (interval-length interval))
-	(b (interval-right interval))
-	i)
-    ;; Change interval's parent to point b.
-    (unless (root-interval-p interval)
-      (if (left-child-p interval)
-	  (setf (interval-left (interval-parent interval)) b)
-	(setf (interval-right (interval-parent interval)) b)))
-    (setf (interval-parent b) (interval-parent interval))
-    ;; Make b the parent of a
-    (setf i (interval-left b)
-	  (interval-left b) interval
-	  (interval-parent interval) b)
-    ;; make a point to c
-    (setf (interval-right interval) i)
-    (when i
-      (setf (interval-parent i) interval))
-    ;; A's total length is decreased by the length of B and its left child.
-    (decf (interval-length interval) (- (interval-length b)
-				    (right-total-length interval)))
-    (check-total-length interval)
-    ;; B must have the same total length of A.
-    (setf (interval-length b) old-total)
-    (check-total-length b)
-    b))
-	  
-(defun total-length (root)
-  "TOTAL_LENGTH"
-  (if root
-      (interval-length root)
-    0))
-
-(defun left-total-length (root)
-  (if (interval-left root)
-      (interval-length (interval-left root))
-    0))
-
-(defun right-total-length (root)
-  (if (interval-right root)
-      (interval-length (interval-right root))
-    0))
-
-(defun interval-text-length (root)
-  "The size of text represented by this interval alone. LENGTH."
-  (if root
-      (- (total-length root)
-	 (total-length (interval-right root))
-	 (total-length (interval-left root)))
-    0))
-
-(defun balance-an-interval (i)						 
-  (let (old-diff
-	new-diff)
-    (loop
-     (setf old-diff (- (left-total-length i) (right-total-length i)))
-     (cond ((> old-diff 0)
-	    ;; Since the left child is longer, there must be one.
-	    (setf new-diff (+ (- (interval-length i) 
-				 (interval-length (interval-left i)))
-			      (- (right-total-length (interval-left i))
-				 (left-total-length (interval-left i)))))
-	    (when (>= (abs new-diff) old-diff)
-	      (return-from balance-an-interval i))
-	    (setf i (rotate-right i))
-	    (balance-an-interval (interval-right i)))
-	   ((< old-diff 0)
-	    (setf new-diff (+ (- (interval-length i) 
-				 (interval-length (interval-right i)))
-			      (- (left-total-length (interval-right i))
-				 (right-total-length (interval-right i)))))
-	    (when (>= (abs new-diff) (- old-diff))
-	      (return-from balance-an-interval i))
-	    (setf i (rotate-left i))
-	    (balance-an-interval (interval-left i)))
-	   (t (return-from balance-an-interval i))))))
-
-(defun balance-possible-root-interval (interval)
-  (let ((has-parent nil)
-	parent)
-  (when (null (interval-parent interval))
-    (return-from balance-possible-root-interval interval))
-  (when (interval-has-object interval)
-    (setf parent (interval-parent interval)
-	  has-parent t))
-  (setf interval (balance-intervals interval))
-  (when has-parent
-    (setf (intervals parent) interval))
-  interval))
-
-(defun balance-intervals (tree)
-  "Balance the interval tree TREE. Balancing is by weight: the amount
-of text."
-  (labels ((balance (tree)
-             (when (interval-left tree)
-	       (balance (interval-left tree)))
-	     (when (interval-right tree)
-	       (balance (interval-right tree)))
-	     (balance-an-interval tree)))
-    (when tree
-      (balance tree))))
 
 (defun find-interval (tree position)
   (let ((relative-position position))
@@ -385,6 +379,47 @@ of text."
 		 (return-from previous-interval i))
 	    do (setf i (interval-parent i))))))
 
+(defun delete-node (i)
+  ;; Trivial cases
+  (when (null (interval-left i))
+    (return-from delete-node (interval-right i)))
+  (when (null (interval-right i))
+    (return-from delete-node (interval-left i)))
+  ;; Meat
+  (let ((migrate (interval-left i))
+	(this (interval-right i))
+	(migrate-amt (interval-length (interval-left i))))
+    (while (interval-left this)
+      (setf this (interval-left this))
+      (incf (interval-length this) migrate-amt))
+    (check-total-length this)
+    (setf (interval-left this) migrate)
+    (setf (interval-parent migrate) this)
+    (interval-right i)))
+
+(defun delete-interval (i)
+  (let ((amt (interval-text-length i))
+	parent)
+    (and (> amt 0)
+	 (error "only used on zero length intervals."))
+    (when (root-interval-p i)
+      (let ((owner (interval-parent i)))
+	(setf parent (delete-node i))
+	(when (interval-parent parent)
+	  (setf (interval-parent parent) owner))
+	(setf (intervals owner) parent)
+	(return-from delete-interval)))
+    (setf parent (interval-parent i))
+    (if (left-child-p i)
+	(progn
+	  (setf (interval-left parent) (delete-node i))
+	  (when (interval-left parent)
+	    (setf (interval-parent (interval-left parent)) parent)))
+      (progn
+	(setf (interval-right parent) (delete-node i))
+	(when (interval-right parent)
+	  (setf (interval-parent (interval-right parent)) parent))))))
+
 (defun merge-interval-right (i)
   (let ((absorb (interval-text-length i))
 	successor)
@@ -440,8 +475,155 @@ of text."
       )
     (error "merge-interval-left: gak")))
 
+(defun copy-properties (source target)
+  (when (and (default-interval-p source)
+	     (default-interval-p target))
+    (return-from copy-properties))
+  (setf (interval-plist target) (copy-list (interval-plist source))))
 
-;; adjust_intervals_for_insertion (tree, position, length)
+(defun merge-properties (source target)
+  "/* Merge the properties of interval SOURCE into the properties of
+interval TARGET.  That is to say, each property in SOURCE is added to
+TARGET if TARGET has no such property as yet.  */"
+  (unless (and (default-interval-p source)
+	       (default-interval-p target))
+    (doplist (sym val (interval-plist source))
+      (let ((found (getf (interval-plist target) sym)))
+	(unless found
+	  (setf (getf (interval-plist target) sym) val))))))
+
+(defun merge-properties-sticky (pleft pright)
+  "Any property might be front-sticky on the left, rear-sticky on the left,
+front-sticky on the right, or rear-sticky on the right; the 16 combinations
+can be arranged in a matrix with rows denoting the left conditions and
+columns denoting the right conditions:
+      _  __  _
+_     FR FR FR FR
+FR__   0  1  2  3
+ _FR   4  5  6  7
+FR     8  9  A  B
+  FR   C  D  E  F
+
+left-props  = '(front-sticky (p8 p9 pa pb pc pd pe pf)
+		   rear-nonsticky (p4 p5 p6 p7 p8 p9 pa pb)
+		   p0 L p1 L p2 L p3 L p4 L p5 L p6 L p7 L
+		   p8 L p9 L pa L pb L pc L pd L pe L pf L)
+right-props = '(front-sticky (p2 p3 p6 p7 pa pb pe pf)
+		   rear-nonsticky (p1 p2 p5 p6 p9 pa pd pe)
+		   p0 R p1 R p2 R p3 R p4 R p5 R p6 R p7 R
+                   p8 R p9 R pa R pb R pc R pd R pe R pf R)
+
+We inherit from whoever has a sticky side facing us.  If both sides
+do (cases 2, 3, E, and F), then we inherit from whichever side has a
+non-nil value for the current property.  If both sides do, then we take
+from the left.
+
+When we inherit a property, we get its stickiness as well as its value.
+So, when we merge the above two lists, we expect to get this:
+
+result      = '(front-sticky (p6 p7 pa pb pc pd pe pf)
+		   rear-nonsticky (p6 pa)
+		   p0 L p1 L p2 L p3 L p6 R p7 R
+		   pa R pb R pc L pd L pe L pf L)
+
+The optimizable special cases are:
+    left rear-nonsticky = nil, right front-sticky = nil (inherit left)
+    left rear-nonsticky = t,   right front-sticky = t   (inherit right)
+    left rear-nonsticky = t,   right front-sticky = nil (inherit none)"
+  (labels ((tmem (sym set)
+             ;; Test for membership, allowing for t (actually any
+	     ;; non-cons) to mean the universal set."
+	     (if (consp set) 
+		 (find sym set)
+	       set)))
+    (let (props 
+	  front
+	  rear 
+	  (lfront (getf pleft  'front-sticky))
+	  (lrear  (getf pleft  'rear-nonsticky))
+	  (rfront (getf pright 'front-sticky))
+	  (rrear  (getf pright 'rear-nonsticky))
+	  cat use-left use-right)
+      (doplist (sym rval pright)
+	       (unless (or (eq sym 'rear-nonsticky)
+			   (eq sym 'front-sticky))
+		 ;; Indicate whether the property is explicitly
+		 ;; defined on the left.  (We know it is defined
+		 ;; explicitly on the right because otherwise we don't
+		 ;; get here.)
+		 (let* ((lval (getf pleft sym))
+			;; Even if lrear or rfront say nothing about the
+			;; stickiness of SYM,
+			;; Vtext_property_default_nonsticky may give
+			;; default stickiness to SYM.
+			(tmp (assoc sym *text-property-default-nonsticky*)))
+		   (setf use-left (and lval
+				       (not (or (tmem sym lrear)
+						(and (consp tmp)
+						     (cdr tmp)))))
+			 use-right (or (tmem sym lrear)
+				       (and (consp tmp)
+					    (null (cdr tmp)))))
+		   (when (and use-left
+			      use-right)
+		     (cond ((null lval)
+			    (setf use-left nil))
+			   ((null rval)
+			    (setf use-right nil))))
+		   (cond (use-left
+			  ;; We build props as (value sym ...) rather than (sym value ...)
+			  ;; because we plan to nreverse it when we're done.
+			  (setf (getf props sym) lval)
+			  (when (tmem sym lfront)
+			    (push sym front))
+			  (when (tmem sym lrear)
+			    (push sym rear)))
+			 (use-right
+			  (setf (getf props sym) rval)
+			  (when (tmem sym rfront)
+			    (push sym front))
+			  (when (tmem sym rrear)
+			    (push sym rear)))))))
+      ;; Now go through each element of PLEFT.
+      (doplist (sym lval pleft)
+	       (unless (or (eq sym 'rear-nonsticky)
+			   (eq sym 'front-sticky))
+		 ;; If sym is in PRIGHT, we've already considered it.
+		 (let* ((present (getf pright sym))
+			;; Even if lrear or rfront say nothing about the
+			;; stickiness of SYM,
+			;; Vtext_property_default_nonsticky may give
+			;; default stickiness to SYM.
+			(tmp (assoc sym *text-property-default-nonsticky*)))
+		   ;; XXX: if sym is set in pright to nil, its the same
+		   ;; as sym not being in the list.
+		   (unless present
+		     ;; Since rval is known to be nil in this loop, the test simplifies.
+		     (cond ((not (or (tmem sym lrear)
+				     (and (consp tmp)
+					  (cdr tmp))))
+			    (setf (getf props sym) lval)
+			    (when (tmem sym lfront)
+			      (push sym front)))
+			   ((or (tmem sym rfront)
+				(and (consp tmp)
+				     (null (cdr tmp))))
+			    ;; The value is nil, but we still inherit the stickiness
+			    ;; from the right.
+			    (setf (getf props sym) lval)
+			    (when (tmem sym rrear)
+			      (push sym rear))))))))
+      (when rear
+	(setf (getf props 'rear-nonsticky) (nreverse rear)))
+      (setf cat (textget props 'category))
+      ;; If we have inherited a front-stick category property that is t,
+      ;; we don't need to set up a detailed one.
+      (when (and front
+		 (not (and cat
+			   (symbolp cat)
+			   (eq (get cat 'front-sticky) t))))
+	(setf (getf props 'front-sticky) (nreverse front)))
+      props)))
 
 (defun adjust-intervals-for-insertion (tree position length)
   "Effect an adjustment corresponding to the addition of LENGTH characters
@@ -647,6 +829,68 @@ buffer position, i.e. origin 1)."
       0
     (buffer-min (interval-parent source))))
 
+(defun reproduce-tree (source parent)
+  (let ((tree (copy-interval source)))
+    (setf (interval-plist tree) (copy-list (interval-plist source))
+	  (interval-parent tree) parent)
+    (when (interval-left source)
+      (setf (interval-left tree) (reproduce-tree (interval-left source) tree)))
+    (when (interval-right source)
+      (setf (interval-right tree) (reproduce-tree (interval-right source) tree)))
+    tree))
+
+(defun set-properties (properties interval object)
+  (when (typep object 'buffer)
+    ;; record undo info
+    )
+  (setf (interval-plist interval) (copy-tree properties)))
+
+(defun set-text-properties-1 (start end properties buffer i)
+  (let ((len (- end start))
+	(prev-changed nil)
+	unchanged)
+    (when (zerop len)
+      (return-from set-text-properties-1))
+    (when (minusp len)
+      (incf start len)
+      (setf len (abs len)))
+    (when (null i)
+      (setf i (find-interval (intervals buffer) start)))
+    (when (/= (interval-pt i) start)
+      (setf unchanged i
+	    i (split-interval-right unchanged (- start (interval-pt unchanged))))
+      (when (> (interval-text-length i) len)
+	(copy-properties unchanged i)
+	(setf i (split-interval-left i len))
+	(set-properties properties i buffer)
+	(return-from set-text-properties-1))
+      (set-properties properties i buffer)
+      (when (= (interval-text-length i) len)
+	(return-from set-text-properties-1))
+      (setf prev-changed i)
+      (decf len (interval-text-length i))
+      (setf i (next-interval i)))
+    (while (> len 0)
+      (when (null i)
+        (error "borked."))
+      (when (>= (interval-text-length i) len)
+        (when (> (interval-text-length i) len)
+          (setf i (split-interval-left i len)))
+        (set-properties properties i buffer)
+        (when prev-changed
+          (merge-interval-left i))
+        (return-from set-text-properties-1))
+      (decf len (interval-text-length i))
+      ;; We have to call set_properties even if we are going
+      ;; to merge the intervals, so as to make the undo
+      ;; records and cause redisplay to happen.
+      (set-properties properties i buffer)
+      (if (null prev-changed)
+          (setf prev-changed i)
+          (setf prev-changed (merge-interval-left i)
+                i prev-changed))
+      (setf i (next-interval i)))))
+
 (defun graft-intervals-into-buffer (source position length buffer inherit)
   "Insert the intervals of SOURCE into BUFFER at POSITION.
 LENGTH is the length of the text in SOURCE.
@@ -759,226 +1003,6 @@ text..."
       (setf under (next-interval this)))
     (when (intervals buffer)
       (setf (intervals buffer) (balance-an-interval (intervals buffer))))))
-
-(defun root-interval-p (i)
-  "Return true if i is the root interval node."
-  (or (null (interval-parent i))
-      (not (typep (interval-parent i) 'interval))))
-
-(defun root-interval (interval)
-  "Return the root of interval."
-  (do ((i interval (interval-parent i)))
-      ((root-interval-p i) i)))
-
-(defun leaf-interval-p (i)
-  "Return T if this interval has no children."
-  (and (null (interval-left i))
-       (null (interval-right i))))
-
-(defun only-interval-p (i)
-  "Return T if this interval is the only interval in the interval tree."
-  (and (root-interval-p i)
-       (leaf-interval-p i)))
-  
-
-(defun delete-node (i)
-  ;; Trivial cases
-  (when (null (interval-left i))
-    (return-from delete-node (interval-right i)))
-  (when (null (interval-right i))
-    (return-from delete-node (interval-left i)))
-  ;; Meat
-  (let ((migrate (interval-left i))
-	(this (interval-right i))
-	(migrate-amt (interval-length (interval-left i))))
-    (while (interval-left this)
-      (setf this (interval-left this))
-      (incf (interval-length this) migrate-amt))
-    (check-total-length this)
-    (setf (interval-left this) migrate)
-    (setf (interval-parent migrate) this)
-    (interval-right i)))
-
-(defun delete-interval (i)
-  (let ((amt (interval-text-length i))
-	parent)
-    (and (> amt 0)
-	 (error "only used on zero length intervals."))
-    (when (root-interval-p i)
-      (let ((owner (interval-parent i)))
-	(setf parent (delete-node i))
-	(when (interval-parent parent)
-	  (setf (interval-parent parent) owner))
-	(setf (intervals owner) parent)
-	(return-from delete-interval)))
-    (setf parent (interval-parent i))
-    (if (left-child-p i)
-	(progn
-	  (setf (interval-left parent) (delete-node i))
-	  (when (interval-left parent)
-	    (setf (interval-parent (interval-left parent)) parent)))
-      (progn
-	(setf (interval-right parent) (delete-node i))
-	(when (interval-right parent)
-	  (setf (interval-parent (interval-right parent)) parent))))))
-
-(defun default-interval-p (i)
-  (or (null i)
-      (null (interval-plist i))))
-
-(defun reproduce-tree (source parent)
-  (let ((tree (copy-interval source)))
-    (setf (interval-plist tree) (copy-list (interval-plist source))
-	  (interval-parent tree) parent)
-    (when (interval-left source)
-      (setf (interval-left tree) (reproduce-tree (interval-left source) tree)))
-    (when (interval-right source)
-      (setf (interval-right tree) (reproduce-tree (interval-right source) tree)))
-    tree))
-
-(defun merge-properties (source target)
-  "/* Merge the properties of interval SOURCE into the properties of
-interval TARGET.  That is to say, each property in SOURCE is added to
-TARGET if TARGET has no such property as yet.  */"
-  (unless (and (default-interval-p source)
-	       (default-interval-p target))
-    (doplist (sym val (interval-plist source))
-      (let ((found (getf (interval-plist target) sym)))
-	(unless found
-	  (setf (getf (interval-plist target) sym) val))))))
-
-(defun merge-properties-sticky (pleft pright)
-  "Any property might be front-sticky on the left, rear-sticky on the left,
-front-sticky on the right, or rear-sticky on the right; the 16 combinations
-can be arranged in a matrix with rows denoting the left conditions and
-columns denoting the right conditions:
-      _  __  _
-_     FR FR FR FR
-FR__   0  1  2  3
- _FR   4  5  6  7
-FR     8  9  A  B
-  FR   C  D  E  F
-
-left-props  = '(front-sticky (p8 p9 pa pb pc pd pe pf)
-		   rear-nonsticky (p4 p5 p6 p7 p8 p9 pa pb)
-		   p0 L p1 L p2 L p3 L p4 L p5 L p6 L p7 L
-		   p8 L p9 L pa L pb L pc L pd L pe L pf L)
-right-props = '(front-sticky (p2 p3 p6 p7 pa pb pe pf)
-		   rear-nonsticky (p1 p2 p5 p6 p9 pa pd pe)
-		   p0 R p1 R p2 R p3 R p4 R p5 R p6 R p7 R
-                   p8 R p9 R pa R pb R pc R pd R pe R pf R)
-
-We inherit from whoever has a sticky side facing us.  If both sides
-do (cases 2, 3, E, and F), then we inherit from whichever side has a
-non-nil value for the current property.  If both sides do, then we take
-from the left.
-
-When we inherit a property, we get its stickiness as well as its value.
-So, when we merge the above two lists, we expect to get this:
-
-result      = '(front-sticky (p6 p7 pa pb pc pd pe pf)
-		   rear-nonsticky (p6 pa)
-		   p0 L p1 L p2 L p3 L p6 R p7 R
-		   pa R pb R pc L pd L pe L pf L)
-
-The optimizable special cases are:
-    left rear-nonsticky = nil, right front-sticky = nil (inherit left)
-    left rear-nonsticky = t,   right front-sticky = t   (inherit right)
-    left rear-nonsticky = t,   right front-sticky = nil (inherit none)"
-  (labels ((tmem (sym set)
-             ;; Test for membership, allowing for t (actually any
-	     ;; non-cons) to mean the universal set."
-	     (if (consp set) 
-		 (find sym set)
-	       set)))
-    (let (props 
-	  front
-	  rear 
-	  (lfront (getf pleft  'front-sticky))
-	  (lrear  (getf pleft  'rear-nonsticky))
-	  (rfront (getf pright 'front-sticky))
-	  (rrear  (getf pright 'rear-nonsticky))
-	  cat use-left use-right)
-      (doplist (sym rval pright)
-	       (unless (or (eq sym 'rear-nonsticky)
-			   (eq sym 'front-sticky))
-		 ;; Indicate whether the property is explicitly
-		 ;; defined on the left.  (We know it is defined
-		 ;; explicitly on the right because otherwise we don't
-		 ;; get here.)
-		 (let* ((lval (getf pleft sym))
-			;; Even if lrear or rfront say nothing about the
-			;; stickiness of SYM,
-			;; Vtext_property_default_nonsticky may give
-			;; default stickiness to SYM.
-			(tmp (assoc sym *text-property-default-nonsticky*)))
-		   (setf use-left (and lval
-				       (not (or (tmem sym lrear)
-						(and (consp tmp)
-						     (cdr tmp)))))
-			 use-right (or (tmem sym lrear)
-				       (and (consp tmp)
-					    (null (cdr tmp)))))
-		   (when (and use-left
-			      use-right)
-		     (cond ((null lval)
-			    (setf use-left nil))
-			   ((null rval)
-			    (setf use-right nil))))
-		   (cond (use-left
-			  ;; We build props as (value sym ...) rather than (sym value ...)
-			  ;; because we plan to nreverse it when we're done.
-			  (setf (getf props sym) lval)
-			  (when (tmem sym lfront)
-			    (push sym front))
-			  (when (tmem sym lrear)
-			    (push sym rear)))
-			 (use-right
-			  (setf (getf props sym) rval)
-			  (when (tmem sym rfront)
-			    (push sym front))
-			  (when (tmem sym rrear)
-			    (push sym rear)))))))
-      ;; Now go through each element of PLEFT.
-      (doplist (sym lval pleft)
-	       (unless (or (eq sym 'rear-nonsticky)
-			   (eq sym 'front-sticky))
-		 ;; If sym is in PRIGHT, we've already considered it.
-		 (let* ((present (getf pright sym))
-			;; Even if lrear or rfront say nothing about the
-			;; stickiness of SYM,
-			;; Vtext_property_default_nonsticky may give
-			;; default stickiness to SYM.
-			(tmp (assoc sym *text-property-default-nonsticky*)))
-		   ;; XXX: if sym is set in pright to nil, its the same
-		   ;; as sym not being in the list.
-		   (unless present
-		     ;; Since rval is known to be nil in this loop, the test simplifies.
-		     (cond ((not (or (tmem sym lrear)
-				     (and (consp tmp)
-					  (cdr tmp))))
-			    (setf (getf props sym) lval)
-			    (when (tmem sym lfront)
-			      (push sym front)))
-			   ((or (tmem sym rfront)
-				(and (consp tmp)
-				     (null (cdr tmp))))
-			    ;; The value is nil, but we still inherit the stickiness
-			    ;; from the right.
-			    (setf (getf props sym) lval)
-			    (when (tmem sym rrear)
-			      (push sym rear))))))))
-      (when rear
-	(setf (getf props 'rear-nonsticky) (nreverse rear)))
-      (setf cat (textget props 'category))
-      ;; If we have inherited a front-stick category property that is t,
-      ;; we don't need to set up a detailed one.
-      (when (and front
-		 (not (and cat
-			   (symbolp cat)
-			   (eq (get cat 'front-sticky) t))))
-	(setf (getf props 'front-sticky) (nreverse front)))
-      props)))
 
 (defun offset-intervals (buffer start length)
   "Make the adjustments necessary to the interval tree of BUFFER to

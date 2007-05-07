@@ -185,7 +185,7 @@ the text properties present."
 				   :width cols
 				   :height lines
 				   :window-tree (list w mb)
-				   :current-window w
+				   :selected-window w
 				   :minibuffer-window mb
 				   :window-stream ws
 				   :double-buffer l

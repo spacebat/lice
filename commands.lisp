@@ -2,6 +2,17 @@
 
 (in-package "LICE")
 
+(defvar *prefix-arg* nil
+  "The value of the prefix argument for the next editing command.
+It may be a number, or the symbol `-' for just a minus sign as arg,
+or a list whose car is a number for just one or more C-u's
+or nil if no argument has been specified.
+
+You cannot examine this variable to find the argument for this command
+since it has been set to nil by the time you can look.
+Instead, you should use the variable `current-prefix-arg', although
+normally commands can get this prefix argument with (interactive \"P\").")
+
 (defclass command ()
   ((name :type symbol :initarg :name :accessor command-name)
    (args :type list :initarg :args :accessor command-args)

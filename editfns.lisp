@@ -1,4 +1,4 @@
-(in-package :lice)
+(in-package "LICE")
 
 (defvar *inhibit-field-text-motion* nil
   "Non-nil means text motion commands don't notice fields.")
@@ -74,7 +74,7 @@ is not stored."
 	(at-field-end nil)
 	before-field after-field)
     (unless pos
-      (setf pos (point)))
+      (setf pos (pt)))
     (setf after-field (get-char-property-and-overlay pos 'field buf nil)
 	  before-field (if (> pos (begv buf))
 			   (get-char-property-and-overlay (1- pos) 'field buf nil)
@@ -143,34 +143,6 @@ is not stored."
 		     (setf pos (next-single-char-property-change pos 'field buf end-limit))
 		     (or pos
 			 (zv buf))))))))
-
-(defun make-buffer-string (start end props &optional (buffer (current-buffer)))
-  "Making strings from buffer contents.
-
-Return a Lisp_String containing the text of the current buffer from
-START to END. If text properties are in use and the current buffer has
-properties in the range specified, the resulting string will also have
-them, if PROPS is nonzero.
-
-We don't want to use plain old make_string here, because it calls
-make_uninit_string, which can cause the buffer arena to be
-compacted.  make_string has no way of knowing that the data has
-been moved, and thus copies the wrong data into the string.  This
-doesn't effect most of the other users of make_string, so it should
-be left as is.  But we should use this function when conjuring
-buffer substrings."
-  (declare (ignore props))
-  ;; If the gap intersects with the range we wanna grab, move it.
-  (if (= start end)
-      ""
-    (progn
-      (when (and (< start (buffer-gap-start buffer))
-		 (< (buffer-gap-start buffer) end))
-	(gap-move-to buffer start))
-      (dformat +debug-v+ "substring: ~a ~a ~a~%" start end (length (buffer-data buffer)))
-      (subseq (buffer-data buffer)
-	      (buffer-char-to-aref buffer start)
-	      (1+ (buffer-char-to-aref buffer (1- end)))))))
 
 (defun buffer-substring (start end &optional (buffer (current-buffer)))
   "Return the contents of part of the current buffer as a string.
@@ -256,7 +228,7 @@ Field boundaries are not noticed if `inhibit-field-text-motion' is non-nil."
         fwd prev-old prev-new)
     (unless new-pos 
       ;; Use the current point, and afterwards, set it.
-      (setf new-pos (point)
+      (setf new-pos (pt)
             orig-point new-pos))
     (check-type new-pos number)
     (check-type old-pos number)
@@ -337,6 +309,23 @@ the stretch to be deleted."
   (multiple-value-setq (start end) (validate-region start end buffer))
   (buffer-delete buffer start (- end start)))
 
+(defun point (&aux (buffer (current-buffer)))
+  "Return the point in the current buffer."
+  (pt buffer))
+
+(defun point-marker (&aux (buffer (current-buffer)))
+  "Return value of point, as a marker object."
+  (buffer-point buffer))
+
+(defun point-min (&aux (buffer (current-buffer)))
+  "Return the minimum permissible value of point in the current buffer."
+  (declare (ignore buffer))
+  0)
+
+(defun point-max (&aux (buffer (current-buffer)))
+  "Return the maximum permissible value of point in the current buffer."
+  (buffer-size buffer))
+
 (defmacro save-current-buffer (&body body)
   "Save the current buffer; execute BODY; restore the current buffer.
 Executes BODY just like `progn'."
@@ -369,6 +358,24 @@ even in case of abnormal exit (throw or error).
            (setf (buffer-mark-marker ,cb) ,mark
                  (buffer-point ,cb) ,point))))))
   
+(defun insert (&rest objects)
+  "Insert the arguments, either strings or characters, at point.
+Point and before-insertion markers move forward to end up
+ after the inserted text.
+Any other markers at the point of insertion remain before the text.
+
+If the current buffer is multibyte, unibyte strings are converted
+to multibyte for insertion (see `string-make-multibyte').
+If the current buffer is unibyte, multibyte strings are converted
+to unibyte for insertion (see `string-make-unibyte').
+
+When operating on binary data, it may be necessary to preserve the
+original bytes of a unibyte string when inserting it into a multibyte
+buffer; to accomplish this, apply `string-as-multibyte' to the string
+and insert the result."
+  (dolist (o objects)
+    (insert-move-point (current-buffer) o)))
+
 (defun insert-buffer-substring (buffer start end)
   "Insert before point a substring of the contents of buffer.
 buffer may be a buffer or a buffer name.
@@ -382,27 +389,35 @@ They default to the values of (point-min) and (point-max) in buffer."
 (defun preceding-char ()
   "Return the character preceding point.
 At the beginning of the buffer or accessible region, return #\Nul."
-  (or (char-before (point))
+  (or (buffer-char-before (current-buffer) (pt))
       #\Nul))
 
 (defun following-char ()
   "Return the character following point, as a number.
 At the end of the buffer or accessible region, return #\Nul."
-  (if (>= (point) (zv))
+  (if (>= (pt) (zv))
       #\Nul ; XXX return nil?
-      (buffer-fetch-char (buffer-char-to-aref (current-buffer) (point))
+      (buffer-fetch-char (buffer-char-to-aref (current-buffer) (pt))
                          (current-buffer))))
 
 (defun bolp ()
   "Return t if point is at the beginning of a line."
-  (or (= (point) (point-min))
-      (char= (char-before (point)) #\Newline)))
+  (or (= (pt) (begv))
+      (char= (buffer-char-before (current-buffer) (pt)) #\Newline)))
 
 (defun eolp ()
   "Return t if point is at the end of a line.
 `End of a line' includes point being at the end of the buffer."
-  (or (= (point) (point-max))
-      (char= (char-after (point)) #\Newline)))
+  (or (= (pt) (zv))
+      (char= (buffer-char-after (current-buffer) (pt)) #\Newline)))
+
+(defun bobp (&optional (buffer (current-buffer)))
+  "Return T when the point is at the beginning of the buffer."
+  (= (begv buffer) (pt)))
+
+(defun eobp (&optional (buffer (current-buffer)))
+  "Return T when the point is at the end of the buffer."
+  (= (zv buffer) (pt)))
 
 (defun delete-and-extract-region (start end)
   "Delete the text between start and end and return it."
@@ -440,8 +455,8 @@ This function does not move point."
   ;; FIXME: inhibit-point-motion-hooks
   (let ((pt (save-excursion
               (forward-line (if n (1- n) 0))
-              (point))))
-    (constrain-to-field pt (point) (not (eql n 1)) t nil)))
+              (pt))))
+    (constrain-to-field pt (pt) (not (eql n 1)) t nil)))
 
 (defun line-end-position (&optional (n 1))
   "Return the character position of the last character on the current line.
@@ -457,15 +472,17 @@ boundaries bind `inhibit-field-text-motion' to t.
 This function does not move point."
   (check-type n integer)
   (setf n (- n (if (<= n 0) 1 0)))
-  (let* ((orig (point))
+  (let* ((orig (pt))
          (end-pos (find-before-next-newline orig nil n)))
     (constrain-to-field end-pos orig nil t nil)))
 
 (defun clip-to-bounds (lower num upper)
   (max (min num upper) lower))
 
-(defun string-to-char ()
-  (error "Unimplemented"))
+(defun string-to-char (string)
+  "Convert arg string to a character, the first character of that string.
+A multibyte character is handled correctly."
+  (char string 0))
 
 (defun char-to-string ()
   (error "Unimplemented"))
@@ -589,5 +606,26 @@ This function does not move point."
 
 (defun transpose-regions ()
   (error "Unimplemented"))
+
+(defun goto-char (position &aux (buffer (current-buffer)))
+  "Set point to POSITION, a number."
+  (check-number-coerce-marker position)
+  (when (and (>= position (begv buffer))
+	     (<= position (zv buffer)))
+    (set-point position buffer)))
+
+(defun char-after (&optional (pos (pt)))
+  "Return character in current buffer at position POS.
+***POS is an integer or a marker.
+***If POS is out of range, the value is nil."
+  (check-number-coerce-marker pos)
+  (buffer-char-after (current-buffer) pos))
+
+(defun char-before (&optional (pos (pt)))
+  "Return character in current buffer preceding position POS.
+***POS is an integer or a marker.
+***If POS is out of range, the value is nil."
+  (check-number-coerce-marker pos)
+  (buffer-char-after (current-buffer) (1- pos)))
 
 (provide :lice-0.1/editfns)

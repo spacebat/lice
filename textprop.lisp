@@ -1,4 +1,4 @@
-(in-package :lice)
+(in-package "LICE")
 
 (defvar *inhibit-point-motion-hooks* nil
   "If non-nil, don't run `point-left' and `point-entered' text properties.
@@ -44,6 +44,17 @@ This also inhibits the use of the `intangible' text property.")
 	  (values (create-root-interval object) begin end)
 	(values i begin end)))))
 	
+(defun validate-plist (list)
+  "/* Validate LIST as a property list.  If LIST is not a list, then
+make one consisting of (LIST nil).  Otherwise, verify that LIST is
+even numbered and thus suitable as a plist.  */"
+  (cond ((null list) nil)
+	((consp list)
+	 (if (oddp (length list))
+	     (error "odd length property list")
+	   list))
+	(t (list (list list nil)))))
+
 (defun set-text-properties (start end properties &optional (object (current-buffer)))
   (let ((start-bk start)
 	(end-bk end)
@@ -84,64 +95,6 @@ This also inhibits the use of the `intangible' text property.")
 ;; 			 XINT (end) - XINT (start));
     t))
 
-(defun set-text-properties-1 (start end properties buffer i)
-  (let ((len (- end start))
-	(prev-changed nil)
-	unchanged)
-    (when (zerop len)
-      (return-from set-text-properties-1))
-    (when (minusp len)
-      (incf start len)
-      (setf len (abs len)))
-    (when (null i)
-      (setf i (find-interval (intervals buffer) start)))
-    (when (/= (interval-pt i) start)
-      (setf unchanged i
-	    i (split-interval-right unchanged (- start (interval-pt unchanged))))
-      (when (> (interval-text-length i) len)
-	(copy-properties unchanged i)
-	(setf i (split-interval-left i len))
-	(set-properties properties i buffer)
-	(return-from set-text-properties-1))
-      (set-properties properties i buffer)
-      (when (= (interval-text-length i) len)
-	(return-from set-text-properties-1))
-      (setf prev-changed i)
-      (decf len (interval-text-length i))
-      (setf i (next-interval i)))
-    (while (> len 0)
-      (when (null i)
-        (error "borked."))
-      (when (>= (interval-text-length i) len)
-        (when (> (interval-text-length i) len)
-          (setf i (split-interval-left i len)))
-        (set-properties properties i buffer)
-        (when prev-changed
-          (merge-interval-left i))
-        (return-from set-text-properties-1))
-      (decf len (interval-text-length i))
-      ;; We have to call set_properties even if we are going
-      ;; to merge the intervals, so as to make the undo
-      ;; records and cause redisplay to happen.
-      (set-properties properties i buffer)
-      (if (null prev-changed)
-          (setf prev-changed i)
-          (setf prev-changed (merge-interval-left i)
-                i prev-changed))
-      (setf i (next-interval i)))))
-
-(defun copy-properties (source target)
-  (when (and (default-interval-p source)
-	     (default-interval-p target))
-    (return-from copy-properties))
-  (setf (interval-plist target) (copy-list (interval-plist source))))
-
-(defun set-properties (properties interval object)
-  (when (typep object 'buffer)
-    ;; record undo info
-    )
-  (setf (interval-plist interval) (copy-tree properties)))
-
 (defun add-properties (plist i object)
   "Add the properties in plist to interval I. OBJECT should be the
 string of buffer containing the interval."
@@ -159,17 +112,6 @@ string of buffer containing the interval."
 	    ;; record-property-change
 	    (setf (getf (interval-plist i) sym) val
 		  changed t)))))))
-
-(defun validate-plist (list)
-  "/* Validate LIST as a property list.  If LIST is not a list, then
-make one consisting of (LIST nil).  Otherwise, verify that LIST is
-even numbered and thus suitable as a plist.  */"
-  (cond ((null list) nil)
-	((consp list)
-	 (if (oddp (length list))
-	     (error "odd length property list")
-	   list))
-	(t (list (list list nil)))))
 
 (defun interval-has-all-properties (plist i)
 "/* Return nonzero if interval I has all the properties, with the same
@@ -296,41 +238,6 @@ into it."
        (setf modified (remove-properties properties nil i object)
 	     i (next-interval i)))))
 
-(defun next-single-char-property-change (position prop &optional (object (current-buffer)) limit)
-  "/* Return the position of next text property or overlay change for a specific property.
-Scans characters forward from POSITION till it finds
-a change in the PROP property, then returns the position of the change.
-If the optional third argument OBJECT is a buffer (or nil, which means
-the current buffer), POSITION is a buffer position (integer or marker).
-If OBJECT is a string, POSITION is a 0-based index into it.
-
-The property values are compared with `eql' by default.
-If the property is constant all the way to the end of OBJECT, return the
-last valid position in OBJECT.
-If the optional fourth argument LIMIT is non-nil, don't search
-past position LIMIT; return LIMIT if nothing is found before LIMIT.  */"
-  (if (typep object 'pstring)
-      (progn
-	(setf position (next-single-property-change position prop object limit))
-	(unless position
-	  (if (null limit)
-	      (setf position (pstring-length object))
-	    (setf position limit))))
-    (let ((initial-value (get-char-property position prop object))
-	  value)
-;;       (when (and (typep object 'buffer)
-;; 		 (not (eq object (current-buffer))))
-;; 	(
-      (when (null limit)
-	(setf limit (buffer-max object)))
-      (loop
-       (setf position (next-char-property-change position limit object))
-       (when (>= position limit)
-	 (return limit))
-       (setf value (get-char-property position prop object))
-       (unless (eq value initial-value)
-	 (return position))))))
-
 (defun text-properties-at (position &optional (object (current-buffer)))
   (multiple-value-bind (i position) (validate-interval-range object position position t)
     (unless (null i)
@@ -340,7 +247,7 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT.  */"
       ;; since no character follows.
       (unless (= position (+ (interval-text-length i) (interval-pt i)))
 	(interval-plist i)))))
-    
+
 (defun get-text-property (position prop &optional (object (current-buffer)))
   (getf (text-properties-at position object) prop))
 
@@ -351,26 +258,42 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT.  */"
 (defun get-char-property (position prop &optional (object (current-buffer)))
   (get-char-property-and-overlay position prop object 0))
 
-(defun previous-single-char-property-change (position prop &optional (object (current-buffer)) limit)
-  (cond ((typep object 'pstring)
-	 (setf position (previous-single-property-change position prop object limit))
-	 (when (null position)
-	   (setf position (or limit
-			      (pstring-length object)))))
-	(t
-	 (unless limit
-	   (setf limit (buffer-min object)))
-	 (if (<= position limit)
-	     (setf position limit)
-	   (let ((initial-value (get-char-property (1- position) prop object))
-		 value)
-	     (loop
-	      (setf position (previous-char-property-change position limit object))
-	      (when (<= position limit)
-		(return limit))
-	      (setf value (get-char-property (1- position) prop object))
-	      (unless (eq value initial-value)
-		(return position))))))))
+(defun previous-property-change (position &optional (object (current-buffer)) limit)
+  "Return the position of previous property change.
+Scans characters backwards from POSITION in OBJECT till it finds
+a change in some text property, then returns the position of the change.
+If the optional second argument OBJECT is a buffer (or nil, which means
+the current buffer), POSITION is a buffer position (integer or marker).
+If OBJECT is a string, POSITION is a 0-based index into it.
+Return nil if the property is constant all the way to the start of OBJECT.
+If the value is non-nil, it is a position less than POSITION, never equal.
+
+If the optional third argument LIMIT is non-nil, don't search
+back past position LIMIT; return LIMIT if nothing is found until LIMIT."
+  (let (i previous)
+    (multiple-value-setq (i position) (validate-interval-range object position position nil))
+    (unless i
+      (return-from previous-property-change limit))
+    (when (= (interval-pt i) position)
+      (setf i (previous-interval i)))
+    (setf previous (previous-interval i))
+    (while (and previous
+                (intervals-equal previous i)
+                (or (null limit)
+                    (> (+ (interval-pt previous)
+                          (interval-text-length previous))
+                       limit)))
+      (setf previous (previous-interval previous)))
+    ;; FIXME: this code needs cleaning
+    (when (null previous)
+      (return-from previous-property-change limit))
+    (setf limit (or limit
+		    (cond ((typep object 'pstring) 0)
+			  ((typep object 'buffer) (buffer-min object)))))
+    (when (<= (+ (interval-pt previous) (interval-text-length previous))
+	      limit)
+      (return-from previous-property-change limit))
+    (+ (interval-pt previous) (interval-text-length previous))))
 
 (defun next-property-change (position &optional object limit)
   "Return the position of next property change.
@@ -415,7 +338,7 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT."
     ;; FIXME: This is silly code.
     (setf position (interval-pt next))
     position))
-	  
+
 (defun next-char-property-change (position &optional limit (buffer (current-buffer)))
   "Return the position of next text property or overlay change.
 This scans characters forward in the current buffer from POSITION till
@@ -427,17 +350,6 @@ If the optional third argument LIMIT is non-nil, don't search
 past position LIMIT; return LIMIT if nothing is found before LIMIT."
   ;;   temp = Fnext_overlay_change (position);
   (next-property-change position buffer (or limit (buffer-max buffer))))
-
-(defun previous-char-property-change (position &optional limit (buffer (current-buffer)))
-  "Return the position of previous text property or overlay change.
-Scans characters backward in the current buffer from POSITION till it
-finds a change in some text property, or the beginning or end of an
-overlay, and returns the position of that.
-If none is found, the function returns (point-max).
-
-If the optional third argument LIMIT is non-nil, don't search
-past position LIMIT; return LIMIT if nothing is found before LIMIT."
-  (previous-property-change position buffer (or limit (buffer-min buffer))))
 
 (defun next-single-property-change (position prop &optional (object (current-buffer)) limit)
   (let (i next here-val)
@@ -491,42 +403,72 @@ past position LIMIT; return LIMIT if nothing is found before LIMIT."
       (return-from previous-single-property-change limit))
     (+ (interval-pt previous) (interval-text-length previous))))
 
-(defun previous-property-change (position &optional (object (current-buffer)) limit)
-  "Return the position of previous property change.
-Scans characters backwards from POSITION in OBJECT till it finds
-a change in some text property, then returns the position of the change.
-If the optional second argument OBJECT is a buffer (or nil, which means
-the current buffer), POSITION is a buffer position (integer or marker).
-If OBJECT is a string, POSITION is a 0-based index into it.
-Return nil if the property is constant all the way to the start of OBJECT.
-If the value is non-nil, it is a position less than POSITION, never equal.
+(defun previous-char-property-change (position &optional limit (buffer (current-buffer)))
+  "Return the position of previous text property or overlay change.
+Scans characters backward in the current buffer from POSITION till it
+finds a change in some text property, or the beginning or end of an
+overlay, and returns the position of that.
+If none is found, the function returns (point-max).
 
 If the optional third argument LIMIT is non-nil, don't search
-back past position LIMIT; return LIMIT if nothing is found until LIMIT."
-  (let (i previous)
-    (multiple-value-setq (i position) (validate-interval-range object position position nil))
-    (unless i
-      (return-from previous-property-change limit))
-    (when (= (interval-pt i) position)
-      (setf i (previous-interval i)))
-    (setf previous (previous-interval i))
-    (while (and previous
-                (intervals-equal previous i)
-                (or (null limit)
-                    (> (+ (interval-pt previous)
-                          (interval-text-length previous))
-                       limit)))
-      (setf previous (previous-interval previous)))
-    ;; FIXME: this code needs cleaning
-    (when (null previous)
-      (return-from previous-property-change limit))
-    (setf limit (or limit
-		    (cond ((typep object 'pstring) 0)
-			  ((typep object 'buffer) (buffer-min object)))))
-    (when (<= (+ (interval-pt previous) (interval-text-length previous))
-	      limit)
-      (return-from previous-property-change limit))
-    (+ (interval-pt previous) (interval-text-length previous))))
+past position LIMIT; return LIMIT if nothing is found before LIMIT."
+  (previous-property-change position buffer (or limit (buffer-min buffer))))
+
+(defun next-single-char-property-change (position prop &optional (object (current-buffer)) limit)
+  "/* Return the position of next text property or overlay change for a specific property.
+Scans characters forward from POSITION till it finds
+a change in the PROP property, then returns the position of the change.
+If the optional third argument OBJECT is a buffer (or nil, which means
+the current buffer), POSITION is a buffer position (integer or marker).
+If OBJECT is a string, POSITION is a 0-based index into it.
+
+The property values are compared with `eql' by default.
+If the property is constant all the way to the end of OBJECT, return the
+last valid position in OBJECT.
+If the optional fourth argument LIMIT is non-nil, don't search
+past position LIMIT; return LIMIT if nothing is found before LIMIT.  */"
+  (if (typep object 'pstring)
+      (progn
+	(setf position (next-single-property-change position prop object limit))
+	(unless position
+	  (if (null limit)
+	      (setf position (pstring-length object))
+	    (setf position limit))))
+    (let ((initial-value (get-char-property position prop object))
+	  value)
+;;       (when (and (typep object 'buffer)
+;; 		 (not (eq object (current-buffer))))
+;; 	(
+      (when (null limit)
+	(setf limit (buffer-max object)))
+      (loop
+       (setf position (next-char-property-change position limit object))
+       (when (>= position limit)
+	 (return limit))
+       (setf value (get-char-property position prop object))
+       (unless (eq value initial-value)
+	 (return position))))))
+
+(defun previous-single-char-property-change (position prop &optional (object (current-buffer)) limit)
+  (cond ((typep object 'pstring)
+	 (setf position (previous-single-property-change position prop object limit))
+	 (when (null position)
+	   (setf position (or limit
+			      (pstring-length object)))))
+	(t
+	 (unless limit
+	   (setf limit (buffer-min object)))
+	 (if (<= position limit)
+	     (setf position limit)
+	   (let ((initial-value (get-char-property (1- position) prop object))
+		 value)
+	     (loop
+	      (setf position (previous-char-property-change position limit object))
+	      (when (<= position limit)
+		(return limit))
+	      (setf value (get-char-property (1- position) prop object))
+	      (unless (eq value initial-value)
+		(return position))))))))
 
 (defun text-property-stickiness (prop pos &optional (buffer (current-buffer)))
   "Return the direction from which the text-property PROP would be

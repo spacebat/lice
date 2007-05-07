@@ -1,19 +1,10 @@
 ;;; Handle input and key command dispatching
 
-(in-package :lice)
+(in-package "LICE")
 
 (define-condition quit (lice-condition)
   () (:documentation "A condition raised when the user aborted the
 operation (by pressing C-g, for instance)."))
-
-(defvar *last-point-position-buffer* nil
-  "The buffer that was current when the last command was started.")
-
-(defvar *last-point-position-window* nil
-  "The window that was selected when the last command was started.")
-
-(defvar *last-point-position* nil
-  "The value of point when the last command was started.")
 
 (defvar *last-command* nil
   "The last command executed.")
@@ -24,17 +15,6 @@ executed before it is executed. *last-command* will be set to this
 when the command finishes. The command can change this value if it
 wants to change what *last-command* will be set to. Used in the `yank'
 and `yank-pop' commands.")
-
-(defvar *prefix-arg* nil
-  "The value of the prefix argument for the next editing command.
-It may be a number, or the symbol `-' for just a minus sign as arg,
-or a list whose car is a number for just one or more C-u's
-or nil if no argument has been specified.
-
-You cannot examine this variable to find the argument for this command
-since it has been set to nil by the time you can look.
-Instead, you should use the variable `current-prefix-arg', although
-normally commands can get this prefix argument with (interactive \"P\").")
 
 (defvar *current-prefix-arg* nil
   "The value of the prefix argument for this editing command.
@@ -87,9 +67,6 @@ The value is a list of KEYs."
 
 ;;; events
 
-(defvar *current-event* nil
-  "The current event being processed.")
-
 (defvar *unread-command-events* nil
   "List of events to be read as the command input.
 These events are processed first, before actual keyboard input.")
@@ -98,6 +75,31 @@ These events are processed first, before actual keyboard input.")
   "Return the character of the last key event in the list of key
 events that invoked the current command."
   (key-char (car *this-command-keys*)))
+
+;; This is really TTY specific
+(defun next-event ()
+  (let* ((*current-event* (if *unread-command-events*
+			      (pop *unread-command-events*)
+			      (wait-for-event)))
+	 (def (if *current-kmap*
+		  (lookup-key *current-kmap* *current-event* t)
+		;; no current kmap? 
+		(or 
+		 (when *overriding-terminal-local-map* 
+		   (lookup-key-internal *overriding-terminal-local-map* *current-event* t *current-keymap-theme* t))
+		 (when *overriding-local-map* 
+		   (lookup-key-internal *overriding-local-map* *current-event* t *current-keymap-theme* t))
+                 (when (current-local-map)
+                   (lookup-key-internal (current-local-map) *current-event* t *current-keymap-theme* t))
+                 ;;(lookup-key-internal (major-mode-map (major-mode)) *current-event* t *current-keymap-theme* t)
+                 ;; TODO: minor mode maps
+		 ;; check the global map
+		 (lookup-key-internal *global-map* *current-event* t *current-keymap-theme* t)))))
+    (dformat +debug-v+ "~a ~s ~a~%"
+	     def #|(key-hashid *current-event*)|# *current-event* (key-char *current-event*))
+    (if def
+	(handle-key-binding def *current-event*)
+      (message "~{~a ~}is undefined" (mapcar 'print-key (cons *current-event* (this-command-keys)))))))
 
 (defgeneric handle-key-binding (binding key-seq))
 
@@ -149,36 +151,12 @@ events that invoked the current command."
               ;; check again.
               (sleep 0.01))))))
 
-;; This is really TTY specific
-(defun next-event ()
-  (let* ((*current-event* (if *unread-command-events*
-			      (pop *unread-command-events*)
-			      (wait-for-event)))
-	 (def (if *current-kmap*
-		  (lookup-key *current-kmap* *current-event* t)
-		;; no current kmap? 
-		(or 
-		 (when *overriding-terminal-local-map* 
-		   (lookup-key-internal *overriding-terminal-local-map* *current-event* t *current-keymap-theme* t))
-		 (when *overriding-local-map* 
-		   (lookup-key-internal *overriding-local-map* *current-event* t *current-keymap-theme* t))
-                 (when (current-local-map)
-                   (lookup-key-internal (current-local-map) *current-event* t *current-keymap-theme* t))
-                 (lookup-key-internal (major-mode-map (major-mode)) *current-event* t *current-keymap-theme* t)
-                 ;; TODO: minor mode maps
-		 ;; check the global map
-		 (lookup-key-internal *global-map* *current-event* t *current-keymap-theme* t)))))
-    (dformat +debug-v+ "~a ~s ~a~%"
-	     def #|(key-hashid *current-event*)|# *current-event* (key-char *current-event*))
-    (if def
-	(handle-key-binding def *current-event*)
-      (message "~{~a ~}is undefined" (mapcar 'print-key (cons *current-event* (this-command-keys)))))))
 
 (defun top-level-next-event ()
   ;; Bind this locally so its value is restored after the
   ;; command is dispatched. Otherwise, calls to set-buffer
   ;; would stick.
-  (setf *current-buffer* (window-buffer (frame-current-window (selected-frame))))
+  (setf *current-buffer* (window-buffer (frame-selected-window (selected-frame))))
   (next-event))
 
 (provide :lice-0.1/input)

@@ -1,8 +1,8 @@
-(in-package :lice)
+(in-package "LICE")
 
 ;; TTY rendering routines
 
-(in-package :lice)
+(in-package "LICE")
 
 (defclass movitz-frame (frame)
   ((double-buffer :type (array character 1) :initarg :double-buffer :accessor frame-double-buffer :documentation
@@ -211,7 +211,7 @@ the text properties present."
 			       :width cols
 			       :height lines
 			       :window-tree (list w mb)
-			       :current-window w
+			       :selected-window w
 			       :minibuffer-window mb
 			       :double-buffer l
 			       ;; :2d-double-buffer d

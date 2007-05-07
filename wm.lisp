@@ -1,6 +1,6 @@
 ;;; window configuration code
 
-(in-package :lice)
+(in-package "LICE")
 
 (defstruct window-bk
   "A structure that stores the vital data needed to restore a window."
@@ -25,7 +25,7 @@
 						    :bpoint (copy-marker bpoint)
 						    :buffer buffer)))
 			    ;; record the current window
-			    (when (eq window (frame-current-window frame))
+			    (when (eq window (frame-selected-window frame))
 			      (setf cw bk))
 			    bk)))
 	     (dup-tree (tree)
@@ -66,7 +66,7 @@
                               (restore-tree (second tree)))))))
       (setf (frame-window-tree frame) (cons (restore-tree (frame-bk-window-tree configuration))
 					    (cdr (frame-window-tree frame)))
-	    (frame-current-window frame) cw)
+	    (frame-selected-window frame) cw)
       (set-buffer (window-buffer cw)))))
 
 (defmacro save-window-excursion (&body body)

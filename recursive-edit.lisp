@@ -1,6 +1,6 @@
 ;;; Implement the recursive edit.
 
-(in-package :lice)
+(in-package "LICE")
 
 (defvar *recursive-edit-depth* 0
   "The current recursive-edit depth.")

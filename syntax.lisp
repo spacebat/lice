@@ -1,6 +1,6 @@
 ;;; Cheap syntax functions
 
-(in-package :lice)
+(in-package "LICE")
 
 (defparameter +syntax-classes+
   '(:whitespace :punctuation :word-constituent :symbol-constituent :open :close :quote :string :math :escape
@@ -119,6 +119,9 @@ It is a copy of the TABLE, which defaults to the standard syntax table."
     (make-instance 'syntax-table 
 		   :hash hash :parent (syntax-table-parent table))))
 
+(defun syntax-table (&aux (buffer (current-buffer)))
+  (buffer-syntax-table buffer))
+
 (defun modify-syntax-entry (char class &key flags extra (table (syntax-table)))
   "Set syntax for character CHAR according to CLASS, FLAGS, and EXTRA."
   (check-type char character)
@@ -144,7 +147,7 @@ the symbol `:WORD-CONSTITUENT' is returned."
 (defun syntax-after (pos &aux (buffer (current-buffer)))
   "Return the raw syntax of the char after POS.
 If POS is outside the buffer's accessible portion, return nil."
-  (unless (or (< pos (point-min)) (>= pos (point-max)))
+  (unless (or (< pos (begv buffer)) (>= pos (zv buffer)))
     (let* ((ch (buffer-char-after buffer pos))
            (descr (and ch (gethash ch (syntax-table buffer)))))
       descr)))
@@ -152,21 +155,15 @@ If POS is outside the buffer's accessible portion, return nil."
 ;; FIXME: having the flags as a list is memory intensive. How about a
 ;; bit vector or number and a function that converts between the two?
 
-(defun buffer-syntax-table (buffer)
-  (major-mode-syntax-table (buffer-major-mode buffer)))
+(defun (setf syntax-table) (value &aux (buffer (current-buffer)))
+  "Select a new syntax table for the current buffer. One argument, a syntax table."
+  (check-type value syntax-table)
+  (setf (buffer-syntax-table buffer) value))
 
-(defun syntax-table (&aux (buffer (current-buffer)))
-  (buffer-syntax-table buffer))
-
-;; (defun (setf syntax-table) (value &aux (buffer (current-buffer)))
-;;   "Select a new syntax table for the current buffer. One argument, a syntax table."
-;;   (check-type value syntax-table)
-;;   (setf (buffer-syntax-table buffer) value))
-
-;; ;; The above looks a bit weird so lets also have a set function.
-;; (defun set-syntax-table (value)
-;;   "Select a new syntax table for the current buffer. One argument, a syntax table."
-;;   (setf (syntax-table) value))
+(depricate set-syntax-table (setf syntax-table))
+(defun set-syntax-table (value)
+  "Select a new syntax table for the current buffer. One argument, a syntax table."
+  (setf (syntax-table) value))
 
 (defun &syntax-with-flags (ch table &optional (default :whitespace))
   (or (gethash ch (syntax-table-hash table))
@@ -324,69 +321,6 @@ beginning."
          (dec-both from from-aref buffer))
       (incf count))
     from))
-	 
-(defcommand forward-word ((n) :prefix)
-  "Move point forward ARG words (backward if ARG is negative).
-Normally returns t.
-If an edge of the buffer or a field boundary is reached, point is left there
-and the function returns nil.  Field boundaries are not noticed if
-`inhibit-field-text-motion' is non-nil."
-  (labels ((isaword (c)
-	     (find c +word-constituents+ :test #'char=)))
-    (let ((buffer (current-buffer)))
-      (cond ((> n 0)
-	     (gap-move-to buffer (buffer-point-aref buffer))
-	     ;; do it n times
-	     (loop for i from 0 below n
-		   while (let (p1 p2)
-			   ;; search forward for a word constituent
-			   (setf p1 (position-if #'isaword (buffer-data buffer) 
-						 :start (buffer-point-aref buffer)))
-			   ;; search forward for a non word constituent
-			   (when p1
-			     (setf p2 (position-if (complement #'isaword) (buffer-data buffer) :start p1)))
-			   (if p2
-			       (goto-char (buffer-aref-to-char buffer p2))
-			     (goto-char (point-max)))
-			   p2)))
-	    ((< n 0)
-	     (setf n (- n))
-	     (gap-move-to buffer (buffer-point-aref buffer))
-	     ;; do it n times
-	     (loop for i from 0 below n
-		   for start = (buffer-gap-start buffer) then (buffer-point-aref buffer)
-		   while (let (p1 p2)
-			   ;; search backward for a word constituent
-			   (setf p1 (position-if #'isaword (buffer-data buffer) 
-						 :from-end t
-						 :end start))
-			   ;; search backward for a non word constituent
-			   (when p1
-			     (setf p2 (position-if (complement #'isaword) (buffer-data buffer) :from-end t :end p1)))
-			   (if p2
-			       (goto-char (1+ (buffer-aref-to-char buffer p2)))
-			     (goto-char (point-min)))
-			   p2)))))))
-
-(defcommand backward-word ((n) :prefix)
-  "Move point forward ARG words (backward if ARG is negative).
-Normally returns t.
-If an edge of the buffer or a field boundary is reached, point is left there
-and the function returns nil.  Field boundaries are not noticed if
-`inhibit-field-text-motion' is non-nil."
-  (forward-word (- n)))
-
-(defcommand kill-word ((arg)
-		       :prefix)
-  "Kill characters forward until encountering the end of a word.
-With argument, do this that many times."
-  (kill-region (point) (progn (forward-word arg) (point))))
-
-(defcommand backward-kill-word ((arg)
-				:prefix)
-  "Kill characters backward until encountering the end of a word.
-With argument, do this that many times."
-  (kill-word (- arg)))
 
 (defvar *parse-sexp-ignore-comments* t
   "Non-nil means `forward-sexp', etc., should treat comments as whitespace.")
@@ -420,6 +354,20 @@ or after.  On return global syntax data is good for lookup at CHAR-POS."
         (dec-both char-pos aref-pos buffer)
         (setf quoted (not quoted))))
     quoted))
+
+(defstruct parse-state
+  depth min-depth
+  this-level-start
+  prev-level-start
+  location
+  level-starts
+  quoted
+  in-comment
+  comment-style
+  comment-string-start
+  in-string
+  start-value
+  start-value-aref)
 
 (defun find-defun-start (pos pos-aref buffer table)
   "Return a defun-start position before POS and not too far before.
@@ -459,7 +407,7 @@ update the global data."
                       :start-pos pos)))
 
 ;; FIXME: doesn't handle ^. Maybe if :not is the first symbol in the list?
-(defun skip-syntax-forward (syntax-list &optional (lim (point-max)))
+(defun skip-syntax-forward (syntax-list &optional (lim (zv)))
   "Move point forward across chars in specified syntax classes.
 SYNTAX-LIST is a string of syntax code characters.
 Stop before a char whose syntax is not in SYNTAX-LIST, or at position LIM.
@@ -468,7 +416,7 @@ This function returns the distance traveled, either zero or positive."
   (check-type lim integer)
   (let* ((buffer (current-buffer))
          (table (syntax-table))
-         (pos (point))
+         (pos (pt))
          (start pos)
          (pos-aref (buffer-char-to-aref buffer pos))
          ch syntax)
@@ -507,7 +455,7 @@ This function returns the distance traveled, either zero or positive."
           negate
           ranges
           chars
-          (start-point (point)))
+          (start-point (pt)))
       ;; don't allow scan outside bounds of buffer.
       (setf lim (min (max lim (begv)) (zv)))
     
@@ -548,7 +496,7 @@ This function returns the distance traveled, either zero or positive."
                 (push c chars)))))
       ;; scan
       (let* ((buffer (current-buffer))
-             (pos (point buffer))
+             (pos (pt buffer))
              (pos-aref (buffer-char-to-aref buffer pos)))
         (catch :done
           (if forwardp
@@ -580,6 +528,399 @@ This function returns the distance traveled, either zero or positive."
 (defun skip-whitespace-forward (&optional (lim (zv)))
   "Move point forward, stopping before a char that is not a space or tab."
   (skip-chars-forward (coerce '(#\Space #\Tab) 'string) lim))
+
+(defun &forward-comment (from from-aref stop nesting style prev-syntax buffer table)
+  "Jump over a comment, assuming we are at the beginning of one.
+FROM is the current position.
+FROM_BYTE is the bytepos corresponding to FROM.
+Do not move past STOP (a charpos).
+The comment over which we have to jump is of style STYLE
+  (either SYNTAX_COMMENT_STYLE(foo) or ST_COMMENT_STYLE).
+NESTING should be positive to indicate the nesting at the beginning
+  for nested comments and should be zero or negative else.
+  ST_COMMENT_STYLE cannot be nested.
+PREV_SYNTAX is the SYNTAX_WITH_FLAGS of the previous character
+  (or nil If the search cannot start in the middle of a two-character).
+
+If successful, return 1 and store the charpos of the comment's end
+into *CHARPOS_PTR and the corresponding bytepos into *BYTEPOS_PTR.
+Else, return 0 and store the charpos STOP into *CHARPOS_PTR, the
+corresponding bytepos into *BYTEPOS_PTR and the current nesting
+ (as defined for state.incomment) in *INCOMMENT_PTR.
+
+The comment end is the last character of the comment rather than the
+  character just after the comment.
+
+Global syntax data is assumed to initially be valid for FROM and
+remains valid for forward search starting at the returned position."
+  (let (c
+        c1
+        code
+        (syntax prev-syntax))
+    (labels ((forward ()
+               (when (= from stop)
+                 (return-from &forward-comment
+                   (values nil from from-aref nesting)))
+
+               (setf c (buffer-fetch-char from-aref buffer)
+                     code (&syntax c table)
+                     syntax (&syntax-with-flags c table))
+
+               (when (and (eq code :end-comment)
+                          (eq (&syntax-flags-comment-style syntax) style)
+                          (if (&syntax-flags-comment-nested syntax)
+                              (and (> nesting 0)
+                                   (progn (decf nesting)
+                                          (zerop nesting)))
+                              (< nesting 0)))
+                 ;; we have encountered a comment end of the same
+                 ;; style as the comment sequence which began this
+                 ;; comment section.
+                 (throw :done nil))
+               (when (and (eq code :comment-fence)
+                          (eq style :st-comment-style))
+                 ;; we have encountered a comment end of the same style
+                 ;; as the comment sequence which began this comment
+                 ;; section.
+                 (throw :done nil))
+               (when (and (> nesting 0)
+                          (eq code :comment)
+                          (&syntax-flags-comment-nested syntax)
+                          (eq (&syntax-flags-comment-style syntax) style))
+                 ;; we have encountered a nested comment of the same style
+                 ;; as the comment sequence which began this comment section
+                 (incf nesting))
+               (inc-both from from-aref buffer))
+             (do-comment ()
+               (when (and (< from stop)
+                          (&syntax-flags-comment-end-first syntax)
+                          (eq (&syntax-flags-comment-style syntax) style)
+                          (progn 
+                            (setf c1 (buffer-fetch-char from-aref buffer))
+                            (&syntax-comment-end-second c1 table))
+                          (if (or (&syntax-flags-comment-nested syntax)
+                                  (&syntax-comment-nested c1 table))
+                              (> nesting 0)
+                              (< nesting 0)))
+                 (decf nesting)
+                 (if (<= nesting 0)
+                     ;; we have encountered a comment end of the same style
+                     ;; as the comment sequence which began this comment
+                     ;; section
+                     (throw :done nil)
+                     (inc-both from from-aref buffer)))
+               (when (and (> nesting 0)
+                          (< from stop)
+                          (&syntax-flags-comment-start-first syntax)
+                          (progn
+                            (setf c1 (buffer-fetch-char from-aref buffer))
+                            (eq (&syntax-comment-style c1 table) style))
+                          (or (&syntax-flags-comment-nested syntax)
+                              (&syntax-comment-nested c1 table)))
+                 ;; we have encountered a nested comment of the same style
+                 ;; as the comment sequence which began this comment
+                 ;; section
+                 (inc-both from from-aref buffer)
+                 (incf nesting))))
+      ;; normalize nesting
+      (cond ((or (null nesting)
+                 (<= nesting 0))
+             (setf nesting -1))
+            ((not (numberp nesting))
+             (setf nesting 1)))
+      ;; Enter the loop in the middle so that we find
+      ;; a 2-char comment ender if we start in the middle of it.
+      (catch :done
+        (if syntax
+            (progn
+              (do-comment)
+              (loop
+                 (forward)
+                 (do-comment)))
+            (loop
+               (forward)
+               (do-comment))))
+      (values t from from-aref))))
+
+(defstruct syntax-level
+  last prev)
+
+;; this function cries out for continuations.  you almost have to look
+;; at the C code to understand what's going on here, i bet. Hell, I
+;; don't even understand it.
+(defun scan-sexps-forward (from from-aref end target-depth stop-before old-state comment-stop buffer table)
+  "Parse forward from FROM / FROM_BYTE to END,
+assuming that FROM has state OLDSTATE (nil means FROM is start of function),
+and return a description of the state of the parse at END.
+If STOPBEFORE is nonzero, stop at the start of an atom.
+If COMMENTSTOP is 1, stop at the start of a comment.
+If COMMENTSTOP is -1, stop at the start or end of a comment,
+after the beginning of a string, or after the end of a string."
+  ;;(message "scan-sexps-forward ~@{~a ~}" from from-aref end target-depth stop-before old-state comment-stop buffer table)
+  (let ((state (make-parse-state))
+        (prev-from from)
+        (prev-from-aref from-aref)
+        prev-from-syntax
+        (boundary-stop (null comment-stop))
+        no-fence
+        c1
+        code
+        comment-nested
+        depth
+        min-depth
+        temp
+        start-quoted
+        levels)
+    (labels ((inc-from ()
+               (setf prev-from from
+                     prev-from-aref from-aref
+                     temp (buffer-fetch-char prev-from-aref buffer)
+                     prev-from-syntax (&syntax-with-flags temp table))
+               (inc-both from from-aref buffer))
+             (cur-level ()
+               "Return the current level struct"
+               (car levels))
+             (do-start-in-comment ()
+               ;; The (from == BEGV) test was to enter the loop in the middle so
+               ;; that we find a 2-char comment ender even if we start in the
+               ;; middle of it.  We don't want to do that if we're just at the
+               ;; beginning of the comment (think of (*) ... (*)).
+               (multiple-value-bind (found out-char out-aref in-comment)
+                   (&forward-comment from from-aref end
+                                     (parse-state-in-comment state)
+                                     (parse-state-comment-style state)
+                                     (if (or (eq from (begv buffer))
+                                             (< from (+ (parse-state-comment-string-start state) 3)))
+                                         nil prev-from-syntax)
+                                     buffer table)
+                 (setf from out-char
+                       from-aref out-aref
+                       (parse-state-in-comment state) in-comment)
+                 ;; Beware!  prev_from and friends are invalid now.
+                 ;; Luckily, the `done' doesn't use them and the INC_FROM
+                 ;; sets them to a sane value without looking at them.
+                 (unless found (throw :end :done))
+                 (inc-from)
+                 (setf (parse-state-in-comment state) nil
+                       (parse-state-comment-style state) nil) ; reset the comment style
+                 (when boundary-stop (throw :end :done))))
+             (do-sym-done ()
+               ;;(message "do-sym-done ~s" (parse-state-level-starts state))
+               (setf (syntax-level-prev (cur-level)) (syntax-level-last (cur-level))))
+             (do-sym-started ()
+               ;; (message "do-sym-started")
+               (while (< from end)
+                 (case (&syntax (buffer-fetch-char from-aref buffer) table)
+                   ((:escape :character-quote)
+                    (inc-from)
+                    (when (= from end)
+                      (throw :end :end-quoted)))
+                   ((:word-constituent :symbol-constituent :quote))
+                   (t
+                    (do-sym-done)
+                    (return nil)))
+                 (inc-from)))
+             (do-start-quoted ()
+               (when (= from end) (throw :end :end-quoted))
+               (inc-from)
+               (do-sym-started))
+             (do-in-string-loop ()
+               (loop
+                  (let (c)
+                    (when (>= from end) (throw :end :done))
+                    (setf c (buffer-fetch-char from-aref buffer)
+                          temp (&syntax c table))
+                    ;; Check TEMP here so that if the char has
+                    ;; a syntax-table property which says it is NOT
+                    ;; a string character, it does not end the string.
+                    (when (and no-fence
+                               (equal c (parse-state-in-string state))
+                               (eq temp :string))
+                      (return nil))
+                    (case temp
+                      (:string-fence
+                       (unless no-fence (return nil)))
+                      ((:character-quote :escape)
+                       (inc-from)
+                       (when (>= from end) (throw :end :end-quoted))))
+                    (inc-from))))
+             (do-string-end ()
+               ;;(message "do-string-end ~s" (parse-state-level-starts state))
+               (setf (parse-state-in-string state) nil
+                     (syntax-level-prev (cur-level)) (syntax-level-last (cur-level)))
+               (inc-from)
+               (when boundary-stop (throw :end :done)))
+             (do-start-in-string ()
+               (setf no-fence (not (eq (parse-state-in-string state) :st-string-style)))
+               (do-in-string-loop)
+               (do-string-end))
+             (do-start-quoted-in-string ()
+               (when (>= from end) (throw :end :end-quoted))
+               (inc-from)
+               (do-in-string-loop)))
+
+      (when (/= from (begv buffer))
+        (dec-both prev-from prev-from-aref buffer))
+
+      (if old-state
+          (progn
+            (setf state old-state
+                  start-quoted (parse-state-quoted state)
+                  depth (or (parse-state-depth state) 0)
+                  start-quoted (parse-state-quoted state))
+            (dolist (i (parse-state-level-starts state))
+              (push (make-syntax-level :last i) levels))
+            ;; make sure we have at least one in the list
+            (unless levels
+              (push (make-syntax-level) levels)))
+          (setf depth 0
+                state (make-parse-state)
+                levels (list (make-syntax-level))))
+
+      ;;(message "top ~s" (parse-state-level-starts state))
+
+      (setf (parse-state-quoted state) nil
+            min-depth depth)
+
+      (setf temp (buffer-fetch-char prev-from-aref buffer)
+            prev-from-syntax (&syntax-with-flags temp table))
+
+      ;; "Enter" the loop at a place appropriate for initial state. In
+      ;; the C code this is a bunch of goto's. Here we call the
+      ;; appropriate function that sync's us so we're ready to enter
+      ;; the loop.
+      (cond ((parse-state-in-comment state)
+             (do-start-quoted))
+            ((parse-state-in-string state)
+             (setf no-fence (not (eq (parse-state-in-string state) :st-string-style)))
+             (if start-quoted
+                 (do-start-quoted-in-string)
+                 (do-start-in-string)))
+            (start-quoted
+             (do-start-quoted)))
+      ;; (message "sane here")
+      (case
+          (catch :end
+            (while (< from end)
+              (catch :continue
+                (inc-from)
+                (setf code (&syntax-flags-syntax prev-from-syntax))
+                ;; (message "here the code is ~s" code)
+                (cond ((and (< from end)
+                            (&syntax-flags-comment-start-first prev-from-syntax)
+                            (progn
+                              (setf c1 (buffer-fetch-char from-aref buffer))
+                              (&syntax-comment-start-second c1 table)))
+                       ;; (message "here 1")
+                       ;; Record the comment style we have entered so that only
+                       ;; the comment-end sequence of the same style actually
+                       ;; terminates the comment section.
+                       (setf (parse-state-comment-style state) (&syntax-comment-style c1 table)
+                             comment-nested (&syntax-flags-comment-nested prev-from-syntax)
+                             comment-nested (or comment-nested 
+                                                (&syntax-comment-nested c1 table))
+                             (parse-state-in-comment state) comment-nested
+                             (parse-state-comment-string-start state) prev-from)
+                       (inc-from)
+                       (setf code :comment))
+                      ((eq code :comment-fence)
+                       ;; (message "here 2")
+                       ;; Record the comment style we have entered so that only
+                       ;; the comment-end sequence of the same style actually
+                       ;; terminates the comment section.
+                       (setf (parse-state-comment-style state) :st-comment-style
+                             (parse-state-in-comment state) -1 ; XXX
+                             (parse-state-comment-string-start state) prev-from
+                             code :comment))
+                      ((eq code :comment)
+                       ;; (message "here 3")
+                       (setf (parse-state-comment-style state) (&syntax-flags-comment-style prev-from-syntax)
+                             (parse-state-in-comment state) (&syntax-flags-comment-nested prev-from-syntax)
+                             (parse-state-comment-string-start state) prev-from)))
+
+                (when (&syntax-flags-prefix prev-from-syntax)
+                  (throw :continue nil))
+
+                ;;(message "code: ~s" code)
+                (case code
+                  ((:escape :character-quote)
+                   ;; this arg means stop at sexp start
+                   (when stop-before (throw :end :stop))
+                   ;;(message ":escae ~s" (parse-state-level-starts state))
+                   (setf (syntax-level-last (cur-level)) prev-from)
+                   (do-start-quoted))
+
+                  ((:word-constituent :symbol-constituent)
+                   (when stop-before (throw :end :stop))
+                   ;;(message ":word-con ~s" (parse-state-level-starts state))
+                   (setf (syntax-level-last (cur-level)) prev-from)
+                   (do-sym-started))
+
+                  ((:comment-fence :comment)
+                   (when (or comment-stop
+                             boundary-stop)
+                     (throw :end :done))
+                   (do-start-in-comment))
+
+                  (:open
+                   (when stop-before (throw :end :stop))
+                   (incf depth)
+                   ;;(message ":open ~s" (parse-state-level-starts state))
+                   (setf (syntax-level-last (cur-level)) prev-from)
+                   ;; (message ":open ~a" (parse-state-level-starts state))
+                   (push (make-syntax-level) levels)
+                   ;;                   (when (> (length level-list) 100) ; XXX hardcoded
+                   ;;                     (error "nesting too deep for parser"))
+                   (when (= target-depth depth) (throw :end :done)))
+
+                  (:close
+                   (decf depth)
+                   (when (< depth min-depth)
+                     (setf min-depth depth))
+                   (unless (= (length levels) 1)
+                     ;;(message "XXX: popping when levels is 1!")
+                     (pop levels))
+                   (setf (syntax-level-prev (cur-level)) (syntax-level-last (cur-level)))
+                   (when (= target-depth depth)
+                     (throw :end :done)))
+
+                  ((:string :string-fence)
+                   (setf (parse-state-comment-string-start state) (1- from))
+                   (when stop-before
+                     (throw :end :stop))
+                   (setf (syntax-level-last (cur-level)) prev-from)
+                   (setf (parse-state-in-string state) (if (eq code :string)
+                                                           (buffer-fetch-char prev-from-aref buffer)
+                                                           :st-string-style))
+                   (when boundary-stop
+                     (throw :end :done))
+                   (do-start-in-string))
+
+                  (:math
+                   ;; FIXME: We should do something with it.
+                   )
+                  (t 
+                   ;; Ignore whitespace, punctuation, quote, endcomment.
+                   ))))
+            :done)
+        (:stop
+         ;; Here if stopping before start of sexp.
+         ;; We have just fetched the char that starts it
+         ;; but return the position before it.
+         (setf from prev-from))
+        (:end-quoted
+         (setf (parse-state-quoted state) t)))
+
+      ;;(message ":end ~s" (parse-state-level-starts state))
+      ;; done
+      (setf (parse-state-depth state) depth
+            (parse-state-min-depth state) min-depth
+            (parse-state-this-level-start state) (syntax-level-prev (cur-level))
+            (parse-state-prev-level-start state) (if (<= (length levels) 1)
+                                                     nil (syntax-level-last (second levels)))
+            (parse-state-location state) from
+            (parse-state-level-starts state) (mapcar 'syntax-level-last (cdr levels)))
+      state)))
 
 (defun &back-comment (from from-aref stop comment-nested comment-style buffer table)
   "Checks whether charpos FROM is at the end of a comment.
@@ -808,119 +1149,6 @@ If successful, return the charpos of the comment's beginning, and the aref pos.
         (setf from-aref (buffer-char-to-aref buffer from))))
     (values (if (= from comment-end) -1 from)
             from-aref)))
-
-(defun &forward-comment (from from-aref stop nesting style prev-syntax buffer table)
-  "Jump over a comment, assuming we are at the beginning of one.
-FROM is the current position.
-FROM_BYTE is the bytepos corresponding to FROM.
-Do not move past STOP (a charpos).
-The comment over which we have to jump is of style STYLE
-  (either SYNTAX_COMMENT_STYLE(foo) or ST_COMMENT_STYLE).
-NESTING should be positive to indicate the nesting at the beginning
-  for nested comments and should be zero or negative else.
-  ST_COMMENT_STYLE cannot be nested.
-PREV_SYNTAX is the SYNTAX_WITH_FLAGS of the previous character
-  (or nil If the search cannot start in the middle of a two-character).
-
-If successful, return 1 and store the charpos of the comment's end
-into *CHARPOS_PTR and the corresponding bytepos into *BYTEPOS_PTR.
-Else, return 0 and store the charpos STOP into *CHARPOS_PTR, the
-corresponding bytepos into *BYTEPOS_PTR and the current nesting
- (as defined for state.incomment) in *INCOMMENT_PTR.
-
-The comment end is the last character of the comment rather than the
-  character just after the comment.
-
-Global syntax data is assumed to initially be valid for FROM and
-remains valid for forward search starting at the returned position."
-  (let (c
-        c1
-        code
-        (syntax prev-syntax))
-    (labels ((forward ()
-               (when (= from stop)
-                 (return-from &forward-comment
-                   (values nil from from-aref nesting)))
-
-               (setf c (buffer-fetch-char from-aref buffer)
-                     code (&syntax c table)
-                     syntax (&syntax-with-flags c table))
-
-               (when (and (eq code :end-comment)
-                          (eq (&syntax-flags-comment-style syntax) style)
-                          (if (&syntax-flags-comment-nested syntax)
-                              (and (> nesting 0)
-                                   (progn (decf nesting)
-                                          (zerop nesting)))
-                              (< nesting 0)))
-                 ;; we have encountered a comment end of the same
-                 ;; style as the comment sequence which began this
-                 ;; comment section.
-                 (throw :done nil))
-               (when (and (eq code :comment-fence)
-                          (eq style :st-comment-style))
-                 ;; we have encountered a comment end of the same style
-                 ;; as the comment sequence which began this comment
-                 ;; section.
-                 (throw :done nil))
-               (when (and (> nesting 0)
-                          (eq code :comment)
-                          (&syntax-flags-comment-nested syntax)
-                          (eq (&syntax-flags-comment-style syntax) style))
-                 ;; we have encountered a nested comment of the same style
-                 ;; as the comment sequence which began this comment section
-                 (incf nesting))
-               (inc-both from from-aref buffer))
-             (do-comment ()
-               (when (and (< from stop)
-                          (&syntax-flags-comment-end-first syntax)
-                          (eq (&syntax-flags-comment-style syntax) style)
-                          (progn 
-                            (setf c1 (buffer-fetch-char from-aref buffer))
-                            (&syntax-comment-end-second c1 table))
-                          (if (or (&syntax-flags-comment-nested syntax)
-                                  (&syntax-comment-nested c1 table))
-                              (> nesting 0)
-                              (< nesting 0)))
-                 (decf nesting)
-                 (if (<= nesting 0)
-                     ;; we have encountered a comment end of the same style
-                     ;; as the comment sequence which began this comment
-                     ;; section
-                     (throw :done nil)
-                     (inc-both from from-aref buffer)))
-               (when (and (> nesting 0)
-                          (< from stop)
-                          (&syntax-flags-comment-start-first syntax)
-                          (progn
-                            (setf c1 (buffer-fetch-char from-aref buffer))
-                            (eq (&syntax-comment-style c1 table) style))
-                          (or (&syntax-flags-comment-nested syntax)
-                              (&syntax-comment-nested c1 table)))
-                 ;; we have encountered a nested comment of the same style
-                 ;; as the comment sequence which began this comment
-                 ;; section
-                 (inc-both from from-aref buffer)
-                 (incf nesting))))
-      ;; normalize nesting
-      (cond ((or (null nesting)
-                 (<= nesting 0))
-             (setf nesting -1))
-            ((not (numberp nesting))
-             (setf nesting 1)))
-      ;; Enter the loop in the middle so that we find
-      ;; a 2-char comment ender if we start in the middle of it.
-      (catch :done
-        (if syntax
-            (progn
-              (do-comment)
-              (loop
-                 (forward)
-                 (do-comment)))
-            (loop
-               (forward)
-               (do-comment))))
-      (values t from from-aref))))
     
 (defun prev-char-comment-end-first (pos pos-aref buffer table)
   "Return the SYNTAX_COMEND_FIRST of the character before POS, POS_BYTE."
@@ -1244,9 +1472,9 @@ but before count is used up, nil is returned."
   "Move point backward over any number of chars with prefix syntax.
 This includes chars with \"quote\" or \"prefix\" syntax (' or p)."
   (let* ((beg (begv buffer))
-         (pos (point buffer))
+         (pos (pt buffer))
          (pos-aref (buffer-char-to-aref buffer pos))
-         (opoint (point buffer))
+         (opoint (pt buffer))
          (opoint-aref (buffer-char-to-aref buffer pos))
          c)
     (when (<= pos beg)
@@ -1265,300 +1493,6 @@ This includes chars with \"quote\" or \"prefix\" syntax (' or p)."
         (dec-both pos pos-aref buffer)))
     (set-point-both buffer opoint opoint-aref)
     nil))
-         
-(defstruct parse-state
-  depth min-depth
-  this-level-start
-  prev-level-start
-  location
-  level-starts
-  quoted
-  in-comment
-  comment-style
-  comment-string-start
-  in-string
-  start-value
-  start-value-aref)
-
-(defstruct syntax-level
-  last prev)
-
-;; this function cries out for continuations.  you almost have to look
-;; at the C code to understand what's going on here, i bet. Hell, I
-;; don't even understand it.
-(defun scan-sexps-forward (from from-aref end target-depth stop-before old-state comment-stop buffer table)
-  "Parse forward from FROM / FROM_BYTE to END,
-assuming that FROM has state OLDSTATE (nil means FROM is start of function),
-and return a description of the state of the parse at END.
-If STOPBEFORE is nonzero, stop at the start of an atom.
-If COMMENTSTOP is 1, stop at the start of a comment.
-If COMMENTSTOP is -1, stop at the start or end of a comment,
-after the beginning of a string, or after the end of a string."
-  ;;(message "scan-sexps-forward ~@{~a ~}" from from-aref end target-depth stop-before old-state comment-stop buffer table)
-  (let ((state (make-parse-state))
-        (prev-from from)
-        (prev-from-aref from-aref)
-        prev-from-syntax
-        (boundary-stop (null comment-stop))
-        no-fence
-        c1
-        code
-        comment-nested
-        depth
-        min-depth
-        temp
-        start-quoted
-        levels)
-    (labels ((inc-from ()
-               (setf prev-from from
-                     prev-from-aref from-aref
-                     temp (buffer-fetch-char prev-from-aref buffer)
-                     prev-from-syntax (&syntax-with-flags temp table))
-               (inc-both from from-aref buffer))
-             (cur-level ()
-               "Return the current level struct"
-               (car levels))
-             (do-start-in-comment ()
-               ;; The (from == BEGV) test was to enter the loop in the middle so
-               ;; that we find a 2-char comment ender even if we start in the
-               ;; middle of it.  We don't want to do that if we're just at the
-               ;; beginning of the comment (think of (*) ... (*)).
-               (multiple-value-bind (found out-char out-aref in-comment)
-                   (&forward-comment from from-aref end
-                                     (parse-state-in-comment state)
-                                     (parse-state-comment-style state)
-                                     (if (or (eq from (begv buffer))
-                                             (< from (+ (parse-state-comment-string-start state) 3)))
-                                         nil prev-from-syntax)
-                                     buffer table)
-                 (setf from out-char
-                       from-aref out-aref
-                       (parse-state-in-comment state) in-comment)
-                 ;; Beware!  prev_from and friends are invalid now.
-                 ;; Luckily, the `done' doesn't use them and the INC_FROM
-                 ;; sets them to a sane value without looking at them.
-                 (unless found (throw :end :done))
-                 (inc-from)
-                 (setf (parse-state-in-comment state) nil
-                       (parse-state-comment-style state) nil) ; reset the comment style
-                 (when boundary-stop (throw :end :done))))
-             (do-sym-done ()
-               ;;(message "do-sym-done ~s" (parse-state-level-starts state))
-               (setf (syntax-level-prev (cur-level)) (syntax-level-last (cur-level))))
-             (do-sym-started ()
-               ;; (message "do-sym-started")
-               (while (< from end)
-                 (case (&syntax (buffer-fetch-char from-aref buffer) table)
-                   ((:escape :character-quote)
-                    (inc-from)
-                    (when (= from end)
-                      (throw :end :end-quoted)))
-                   ((:word-constituent :symbol-constituent :quote))
-                   (t
-                    (do-sym-done)
-                    (return nil)))
-                 (inc-from)))
-             (do-start-quoted ()
-               (when (= from end) (throw :end :end-quoted))
-               (inc-from)
-               (do-sym-started))
-             (do-in-string-loop ()
-               (loop
-                  (let (c)
-                    (when (>= from end) (throw :end :done))
-                    (setf c (buffer-fetch-char from-aref buffer)
-                          temp (&syntax c table))
-                    ;; Check TEMP here so that if the char has
-                    ;; a syntax-table property which says it is NOT
-                    ;; a string character, it does not end the string.
-                    (when (and no-fence
-                               (equal c (parse-state-in-string state))
-                               (eq temp :string))
-                      (return nil))
-                    (case temp
-                      (:string-fence
-                       (unless no-fence (return nil)))
-                      ((:character-quote :escape)
-                       (inc-from)
-                       (when (>= from end) (throw :end :end-quoted))))
-                    (inc-from))))
-             (do-string-end ()
-               ;;(message "do-string-end ~s" (parse-state-level-starts state))
-               (setf (parse-state-in-string state) nil
-                     (syntax-level-prev (cur-level)) (syntax-level-last (cur-level)))
-               (inc-from)
-               (when boundary-stop (throw :end :done)))
-             (do-start-in-string ()
-               (setf no-fence (not (eq (parse-state-in-string state) :st-string-style)))
-               (do-in-string-loop)
-               (do-string-end))
-             (do-start-quoted-in-string ()
-               (when (>= from end) (throw :end :end-quoted))
-               (inc-from)
-               (do-in-string-loop)))
-
-      (when (/= from (begv buffer))
-        (dec-both prev-from prev-from-aref buffer))
-
-      (if old-state
-          (progn
-            (setf state old-state
-                  start-quoted (parse-state-quoted state)
-                  depth (or (parse-state-depth state) 0)
-                  start-quoted (parse-state-quoted state))
-            (dolist (i (parse-state-level-starts state))
-              (push (make-syntax-level :last i) levels))
-            ;; make sure we have at least one in the list
-            (unless levels
-              (push (make-syntax-level) levels)))
-          (setf depth 0
-                state (make-parse-state)
-                levels (list (make-syntax-level))))
-
-      ;;(message "top ~s" (parse-state-level-starts state))
-
-      (setf (parse-state-quoted state) nil
-            min-depth depth)
-
-      (setf temp (buffer-fetch-char prev-from-aref buffer)
-            prev-from-syntax (&syntax-with-flags temp table))
-
-      ;; "Enter" the loop at a place appropriate for initial state. In
-      ;; the C code this is a bunch of goto's. Here we call the
-      ;; appropriate function that sync's us so we're ready to enter
-      ;; the loop.
-      (cond ((parse-state-in-comment state)
-             (do-start-quoted))
-            ((parse-state-in-string state)
-             (setf no-fence (not (eq (parse-state-in-string state) :st-string-style)))
-             (if start-quoted
-                 (do-start-quoted-in-string)
-                 (do-start-in-string)))
-            (start-quoted
-             (do-start-quoted)))
-      ;; (message "sane here")
-      (case
-          (catch :end
-            (while (< from end)
-              (catch :continue
-                (inc-from)
-                (setf code (&syntax-flags-syntax prev-from-syntax))
-                ;; (message "here the code is ~s" code)
-                (cond ((and (< from end)
-                            (&syntax-flags-comment-start-first prev-from-syntax)
-                            (progn
-                              (setf c1 (buffer-fetch-char from-aref buffer))
-                              (&syntax-comment-start-second c1 table)))
-                       ;; (message "here 1")
-                       ;; Record the comment style we have entered so that only
-                       ;; the comment-end sequence of the same style actually
-                       ;; terminates the comment section.
-                       (setf (parse-state-comment-style state) (&syntax-comment-style c1 table)
-                             comment-nested (&syntax-flags-comment-nested prev-from-syntax)
-                             comment-nested (or comment-nested 
-                                                (&syntax-comment-nested c1 table))
-                             (parse-state-in-comment state) comment-nested
-                             (parse-state-comment-string-start state) prev-from)
-                       (inc-from)
-                       (setf code :comment))
-                      ((eq code :comment-fence)
-                       ;; (message "here 2")
-                       ;; Record the comment style we have entered so that only
-                       ;; the comment-end sequence of the same style actually
-                       ;; terminates the comment section.
-                       (setf (parse-state-comment-style state) :st-comment-style
-                             (parse-state-in-comment state) -1 ; XXX
-                             (parse-state-comment-string-start state) prev-from
-                             code :comment))
-                      ((eq code :comment)
-                       ;; (message "here 3")
-                       (setf (parse-state-comment-style state) (&syntax-flags-comment-style prev-from-syntax)
-                             (parse-state-in-comment state) (&syntax-flags-comment-nested prev-from-syntax)
-                             (parse-state-comment-string-start state) prev-from)))
-
-                (when (&syntax-flags-prefix prev-from-syntax)
-                  (throw :continue nil))
-
-                ;;(message "code: ~s" code)
-                (case code
-                  ((:escape :character-quote)
-                   ;; this arg means stop at sexp start
-                   (when stop-before (throw :end :stop))
-                   ;;(message ":escae ~s" (parse-state-level-starts state))
-                   (setf (syntax-level-last (cur-level)) prev-from)
-                   (do-start-quoted))
-
-                  ((:word-constituent :symbol-constituent)
-                   (when stop-before (throw :end :stop))
-                   ;;(message ":word-con ~s" (parse-state-level-starts state))
-                   (setf (syntax-level-last (cur-level)) prev-from)
-                   (do-sym-started))
-
-                  ((:comment-fence :comment)
-                   (when (or comment-stop
-                             boundary-stop)
-                     (throw :end :done))
-                   (do-start-in-comment))
-
-                  (:open
-                   (when stop-before (throw :end :stop))
-                   (incf depth)
-                   ;;(message ":open ~s" (parse-state-level-starts state))
-                   (setf (syntax-level-last (cur-level)) prev-from)
-                   ;; (message ":open ~a" (parse-state-level-starts state))
-                   (push (make-syntax-level) levels)
-                   ;;                   (when (> (length level-list) 100) ; XXX hardcoded
-                   ;;                     (error "nesting too deep for parser"))
-                   (when (= target-depth depth) (throw :end :done)))
-
-                  (:close
-                   (decf depth)
-                   (when (< depth min-depth)
-                     (setf min-depth depth))
-                   (unless (= (length levels) 1)
-                     (message "XXX: popping when levels is 1!")
-                     (pop levels))
-                   (setf (syntax-level-prev (cur-level)) (syntax-level-last (cur-level)))
-                   (when (= target-depth depth)
-                     (throw :end :done)))
-
-                  ((:string :string-fence)
-                   (setf (parse-state-comment-string-start state) (1- from))
-                   (when stop-before
-                     (throw :end :stop))
-                   (setf (syntax-level-last (cur-level)) prev-from)
-                   (setf (parse-state-in-string state) (if (eq code :string)
-                                                           (buffer-fetch-char prev-from-aref buffer)
-                                                           :st-string-style))
-                   (when boundary-stop
-                     (throw :end :done))
-                   (do-start-in-string))
-
-                  (:math
-                   ;; FIXME: We should do something with it.
-                   )
-                  (t 
-                   ;; Ignore whitespace, punctuation, quote, endcomment.
-                   ))))
-            :done)
-        (:stop
-         ;; Here if stopping before start of sexp.
-         ;; We have just fetched the char that starts it
-         ;; but return the position before it.
-         (setf from prev-from))
-        (:end-quoted
-         (setf (parse-state-quoted state) t)))
-
-      ;;(message ":end ~s" (parse-state-level-starts state))
-      ;; done
-      (setf (parse-state-depth state) depth
-            (parse-state-min-depth state) min-depth
-            (parse-state-this-level-start state) (syntax-level-prev (cur-level))
-            (parse-state-prev-level-start state) (if (<= (length levels) 1)
-                                                     nil (syntax-level-last (second levels)))
-            (parse-state-location state) from
-            (parse-state-level-starts state) (mapcar 'syntax-level-last (cdr levels)))
-      state)))
 
 (defun parse-partial-sexp (from to &key (target-depth -100000) stop-before old-state comment-stop &aux (buffer (current-buffer)) (table (syntax-table)))
   "Parse Lisp syntax starting at FROM until TO; return status of parse at TO.
@@ -1600,5 +1534,5 @@ Sixth arg COMMENTSTOP non-nil means stop at the start of a comment.
                                        (if (eq comment-stop 'syntax-table) -1 1)
                                        0)
                                    buffer table)))
-    (goto-char (parse-state-location state) buffer)
+    (set-point (parse-state-location state) buffer)
     state))

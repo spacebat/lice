@@ -67,12 +67,11 @@ from `mode-require-final-newline'."
                            :point (make-marker)
                            :mark (make-marker)
 			   :data data
-			   :mode-line *mode-line-format*
 			   :name (format-filename filename)
 			   ;; 1- because the data has been allocated with 1 extra character
 			   :gap-start (1- (length data))
 			   :gap-size 1 ;;(length +other-buf+)
-			   :major-mode *fundamental-mode*)))
+			   :major-mode '*fundamental-mode*)))
     (set-marker (buffer-point b) 0 b)
     (set-marker (mark-marker b) 0 b)
     b))
@@ -83,15 +82,13 @@ from `mode-require-final-newline'."
     ;; check that the directory exists
     (unless (ensure-directories-exist pn)
       (error "dir doesn't exist"))
-    (if (probe-file pn)
-	(let ((b (make-file-buffer pn)))
-	  (push b *buffer-list*)
-	  b)
-      ;; It doesn't exist so open an empty buffer but give it a file,
-      ;; so it can be saved.
-      (let ((b (get-buffer-create (format-filename pn))))
-	(setf (buffer-file b) pn)
-	b))))
+    (let ((b (get-buffer-create (format-filename pn))))
+      (setf (buffer-file b) pn)
+      (when (probe-file pn)
+        (setf (buffer-data b) (slurp-file pn)
+            (buffer-gap-start b) (1- (length (buffer-data b)))
+            (buffer-gap-size b) 1))
+      b)))
 
 (defcommand find-file ((filename)
 		       (:file "Find File: "))

@@ -1,6 +1,6 @@
 ;;; An interactive debugger for lice
 
-(in-package #:lice)
+(in-package "LICE")
 
 (defvar *debug-on-error* t
   "Non-nil means enter the debugger if an unhandled error is signaled.")
@@ -16,7 +16,7 @@
                          m)))
 (defun debugger-mode ()
   "See `*debugger-mode*'"
-  (set-major-mode *debugger-mode*))
+  (set-major-mode '*debugger-mode*))
 
 (defun enter-debugger (condition old-debugger-value)
   "Create a debugger buffer, print the error and any active restarts."
@@ -28,10 +28,10 @@
     (setf *quit-flag* t)
     (continue))
   ;; make sure we're not in the minibuffer
-  (select-window (first (frame-window-list *current-frame*)))
+  (select-window (first (frame-window-list (selected-frame))))
   (pop-to-buffer (get-buffer-create "*debugger*"))
   (erase-buffer)
-  (set-major-mode *debugger-mode*)
+  (set-major-mode '*debugger-mode*)
   (insert (format nil "Debugger~%~a~%~%~a~%~{~a~%~}" (backtrace-as-string) condition (compute-restarts)))
   (recursive-edit)
   ;; if we exit the recursive edit we'll fall into the regular debugger.

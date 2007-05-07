@@ -1,4 +1,4 @@
-(in-package :lice)
+(in-package "LICE")
 
 (defclass mcl-window (ccl:window)
   ())
@@ -255,7 +255,7 @@ hardware.")
 			       :width cols
 			       :height lines
 			       :window-tree (list w mb)
-			       :current-window w
+			       :selected-window w
 			       :minibuffer-window mb
 			       :double-buffer l
 			       :2d-double-buffer d

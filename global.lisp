@@ -72,14 +72,6 @@ until TEST returns nil."
       `(loop while ,test do ,@body)
       `(loop while ,test)))
 
-(defmacro check-number-coerce-marker (marker-var)
-  "Verify that MARKER-VAR is a number or if it's a marker then
-set the var to the marker's position."
-  `(progn
-     (check-type ,marker-var (or number marker))
-     (when (typep ,marker-var 'marker)
-       (setf ,marker-var (marker-position ,marker-var)))))
-
 (defun cdr-safe (object)
   "Return the cdr of OBJECT if it is a cons cell, or else nil."
   (when (consp object)
@@ -213,9 +205,52 @@ number may be an integer or a floating point number."
   (check-type n number)
   (prin1-to-string n))
 
-(defun string-to-char (string)
-  "Convert arg string to a character, the first character of that string.
-A multibyte character is handled correctly."
-  (char string 0))
+(defun split-string (string &optional (separators " 
+"))
+  "Splits STRING into substrings where there are matches for SEPARATORS.
+Each match for SEPARATORS is a splitting point.
+The substrings between the splitting points are made into a list
+which is returned.
+***If SEPARATORS is absent, it defaults to \"[ \f\t\n\r\v]+\".
+
+If there is match for SEPARATORS at the beginning of STRING, we do not
+include a null substring for that.  Likewise, if there is a match
+at the end of STRING, we don't include a null substring for that.
+
+Modifies the match data; use `save-match-data' if necessary."
+  ;; FIXME: This let is here because movitz doesn't 'lend optional'
+  (let ((seps separators))
+    (labels ((sep (c)
+		  (find c seps :test #'char=)))
+      (loop for i = (position-if (complement #'sep) string) 
+	    then (position-if (complement #'sep) string :start j)
+	    while i
+	    as j = (position-if #'sep string :start i)
+	    collect (subseq string i j)
+	    while j))))
+
+;; A cheap memoizer. Obviously, a hashtable would be better.
+
+(defstruct memoize-state
+  (data (vector nil nil nil nil nil nil nil nil nil nil nil nil))
+  (test 'equal)
+  (pt 0))
+
+(defun memoize-store (state thing value)
+  (incf (memoize-state-pt state))
+  (when (> (memoize-state-pt state) 
+           (length (memoize-state-data state)))
+    (setf (memoize-state-pt state) 0))
+  (setf (svref (memoize-state-data state) (memoize-state-pt state)) (cons thing value))
+  value)
+
+(defmacro memoize (mem-var thing compute)
+  "Check if we've computed a value for thing. if so, use it. if
+not compute it, store the result, and return it."
+  (let ((match (gensym "MATCH")))
+    `(let ((,match (find ,thing (memoize-state-data ,mem-var) :key 'first :test (memoize-state-test ,mem-var))))
+       (if ,match
+           (cdr ,match)
+           (memoize-store ,mem-var ,thing ,compute)))))
 
 (provide :lice-0.1/global)

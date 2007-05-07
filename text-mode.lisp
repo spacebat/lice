@@ -83,7 +83,7 @@ You can thus get the full benefit of adaptive filling
 
 (defcommand text-mode ()
   "See `*text-mode*'."
-  (set-major-mode *text-mode*))
+  (set-major-mode '*text-mode*))
 
 (defvar *paragraph-indent-text-mode*
   (make-instance 'major-mode
@@ -104,7 +104,7 @@ Turning on Paragraph-Indent Text mode runs the normal hooks
 
 (defcommand paragraph-indent-text-mode ()
   "see `*paragraph-indent-text-mode*'."
-  (set-major-mode *paragraph-indent-text-mode*))
+  (set-major-mode '*paragraph-indent-text-mode*))
 
 (defcommand paragraph-indent-minor-mode ()
   "Minor mode for editing text, with leading spaces starting a paragraph.

@@ -1,6 +1,6 @@
 ;; TTY rendering routines
 
-(in-package :lice)
+(in-package "LICE")
 
 (defclass tty-frame (frame)
   ((double-buffer :type (array character 1) :initarg :double-buffer :accessor frame-double-buffer :documentation
@@ -151,7 +151,7 @@ the text properties present."
     (cl-ncurses::attroff (cl-ncurses::COLOR-PAIR 1))
     ;; Update the mode-line if it exists. FIXME: Not the right place
     ;; to update the mode-line.
-    (when (buffer-mode-line (window-buffer w))
+    (when (buffer-local '*mode-line-format* (window-buffer w))
       (update-mode-line (window-buffer w))
       ;;(cl-ncurses::attron cl-ncurses::A_REVERSE)
       (cl-ncurses::attron (cl-ncurses::COLOR-PAIR 2))
@@ -247,7 +247,7 @@ the text properties present."
 			       :width cols
 			       :height lines
 			       :window-tree (list w mb)
-			       :current-window w
+			       :selected-window w
 			       :minibuffer-window mb
 			       :double-buffer l
 			       :2d-double-buffer d)))
@@ -272,7 +272,7 @@ the text properties present."
 			       :width cols
 			       :height lines
 			       :window-tree (list w mb)
-			       :current-window w
+			       :selected-window w
 			       :minibuffer-window mb
 			       :double-buffer l
 			       :2d-double-buffer d)))

@@ -1,6 +1,6 @@
 ;;; lice debugging facilities
 
-(in-package :lice)
+(in-package "LICE")
 
 (defun re-op-lice (op)
   "Perform an asdf operation on :lice and capture the output in a

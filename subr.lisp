@@ -1,82 +1,6 @@
 ;;; subr.lice --- basic lisp subroutines for Emacs
 
-(in-package :lice)
-
-(defun split-string (string &optional (separators " 
-"))
-  "Splits STRING into substrings where there are matches for SEPARATORS.
-Each match for SEPARATORS is a splitting point.
-The substrings between the splitting points are made into a list
-which is returned.
-***If SEPARATORS is absent, it defaults to \"[ \f\t\n\r\v]+\".
-
-If there is match for SEPARATORS at the beginning of STRING, we do not
-include a null substring for that.  Likewise, if there is a match
-at the end of STRING, we don't include a null substring for that.
-
-Modifies the match data; use `save-match-data' if necessary."
-  ;; FIXME: This let is here because movitz doesn't 'lend optional'
-  (let ((seps separators))
-    (labels ((sep (c)
-		  (find c seps :test #'char=)))
-      (loop for i = (position-if (complement #'sep) string) 
-	    then (position-if (complement #'sep) string :start j)
-	    while i
-	    as j = (position-if #'sep string :start i)
-	    collect (subseq string i j)
-	    while j))))
-				     
-(define-condition kbd-parse (lice-condition)
-  () (:documentation "Raised when a kbd string failed to parse."))
-
-(defun parse-mods (mods end)
-  "MODS is a sequence of <MOD CHAR> #\- pairs. Return a list suitable
-for passing as the last argument to (apply #'make-key ...)"
-  (unless (evenp end)
-    (signal 'kbd-parse))
-  (apply #'nconc (loop for i from 0 below end by 2
-		       if (char/= (char mods (1+ i)) #\-)
-		       do (signal 'kbd-parse)
-		       collect (case (char mods i)
-				 (#\M (list :meta t))
-				 (#\A (list :alt t))
-				 (#\C (list :control t))
-				 (#\H (list :hyper t))
-				 (#\s (list :super t))
-				 (#\S (list :shift t))
-				 (t (signal 'kbd-parse))))))
-
-(defun parse-char-name (string)
-  "Return the character whose name is STRING."
-  (or (cond 
-        ((string= string "RET") #\Newline)
-        ((string= string "TAB") #\Tab))
-      (name-char string)
-      (and (= (length string) 1)
-	   (char string 0))))
-
-(defun parse-key (string)
-  "Parse STRING and return a key structure."
-  ;; FIXME: we want to return NIL when we get a kbd-parse error
-  ;;(ignore-errors
-    (let* ((p (when (> (length string) 2)
-		(position #\- string :from-end t :end (- (length string) 1))))
-	   (mods (parse-mods string (if p (1+ p) 0)))
-	   (ch (parse-char-name (subseq string (if p (1+ p) 0)))))
-      (and ch
-	   (apply #'make-key :char ch mods))))
-  
-(defun parse-key-seq (keys)
-  "KEYS is a key sequence. Parse it and return the list of keys."
-  (mapcar 'parse-key (split-string keys)))
-
-(defun kbd (keys)
-  "Convert KEYS to the internal Emacs key representation.
-KEYS should be a string constant in the format used for
-saving keyboard macros ***(see `insert-kbd-macro')."
-  ;; XXX: define-key needs to be fixed to handle a list of keys
-  (first (parse-key-seq keys)))
-
+(in-package "LICE")
 
 ;;; Argument types
 
@@ -213,6 +137,19 @@ See `walk-windows' for the meaning of MINIBUF and FRAME."
 (defun intern-soft (name &optional (package *package*))
   (find-symbol name package))
 
+;;; reading from the buffer
+
+(defun read-from-buffer (&aux (buffer (current-buffer)))
+  "Read 1 sexp from the buffer at the current point, moving the point to the end of what was read"
+  (when (< (buffer-char-to-aref buffer (point buffer))
+	   (buffer-gap-start buffer))
+    (gap-move-to-point buffer))
+  (multiple-value-bind (obj pos)
+      (read-from-string (buffer-data buffer) t nil
+                        :start (buffer-char-to-aref buffer (point buffer)))
+    (set-point (buffer-aref-to-char buffer pos))
+    obj))
+
 (defcommand eval-region ((start end &optional print-flag (read-function 'read-from-string))
                          :region-beginning :region-end)
   "Execute the region as Lisp code.
@@ -240,5 +177,18 @@ This function does not move point."
          (cond ((eq print-flag t)
                 (message "~s" last)))
          (return-from eval-region last)))))
+
+(defun sit-for (seconds &optional nodisp)
+  "Perform redisplay, then wait for seconds seconds or until input is available.
+seconds may be a floating-point value, meaning that you can wait for a
+fraction of a second.
+ (Not all operating systems support waiting for a fraction of a second.)
+Optional arg nodisp non-nil means don't redisplay, just wait for input.
+Redisplay is preempted as always if input arrives, and does not happen
+if input is available before it starts.
+Value is t if waited the full time with no input arriving."
+  (declare (ignore seconds nodisp))
+  ;; FIXME: actually sleep
+  (frame-render (selected-frame)))
 
 (provide :lice-0.1/subr)

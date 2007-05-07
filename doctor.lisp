@@ -128,7 +128,7 @@ reads the sentence before point, and prints the Doctor's answer.")
 
 (defcommand doctor-mode ()
   "See `*doctor-mode*'."
-  (set-major-mode *doctor-mode*))
+  (set-major-mode '*doctor-mode*))
 
 (defun make-doctor-variables ()
   (make-local-variable 'typos)
@@ -922,7 +922,7 @@ Otherwise call the Doctor to parse preceding sentence."
 
 ;; Main processing function for sentences that have been read.
 
-(declaim (special sent))
+;;(declaim (special sent))
 
 (defun doctor-doc (sent)
   ;; Old emacs programs actually depended on dynamic scope!
@@ -1061,7 +1061,7 @@ Put dialogue in buffer."
 	     (insert #\Newline
 		     prompt
 		     (read-string prompt)
-		     \Newline)
+		     #\Newline)
 	     (setq a (doctor-readin)))
 	   (while (and a (not retval))
 		  (cond ((doctor-nounp (car a))

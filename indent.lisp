@@ -32,7 +32,7 @@ Don't rebind TAB unless you really need to.")
   "Return the indentation of the current line.
 This is the horizontal position of the character
 following any initial whitespace."
-  (let ((pt (buffer-scan-newline buffer (point buffer) (begv buffer) -1)))
+  (let ((pt (buffer-scan-newline buffer (pt buffer) (begv buffer) -1)))
     (position-indentation (buffer-char-to-aref buffer pt) buffer)))
 
 ;; (defun current-column ()
@@ -52,7 +52,7 @@ Whether the line is visible (if `selective-display' is t) has no effect;
 however, ^M is treated as end of line when `selective-display' is t.
 Text that has an invisible property is considered as having width 0, unless
 `buffer-invisibility-spec' specifies that it is replaced by an ellipsis."
-  (let ((pos-aref (buffer-char-to-aref buffer (point)))
+  (let ((pos-aref (buffer-char-to-aref buffer (pt buffer)))
         (column 0)
         c)
     (loop

@@ -1,8 +1,26 @@
-(in-package :lice)
+(in-package "LICE")
 
 ;; 
 #+cmu (setf extensions:*gc-notify-after* (lambda (&rest r))
 	    extensions:*gc-notify-before* (lambda (&rest r)))
+
+(defun init-mode-line-format ()
+  (setf *default-mode-line-format*
+        (list "--:" ;; fake it for hype
+              (lambda (buffer)
+                (format nil "~C~C"
+                        ;; FIXME: add read-only stuff
+                        (if (buffer-modified-p buffer)
+                            #\* #\-)
+                        (if (buffer-modified-p buffer)
+                            #\* #\-)))
+              "  "
+              (lambda (buffer)
+                (format nil "~12,,,a" (buffer-name buffer)))
+              "   "
+              (lambda (buffer)
+                (format nil "(~a)" 
+                        (major-mode-name (symbol-value (buffer-major-mode buffer))))))))
 
 (defun lice ()
   "Run the lice environment."
@@ -13,7 +31,9 @@
 	#+clisp (init-clisp)
 	(setf *buffer-list* nil)
 	#+movitz (init-commands)
+        (init-mode-line-format)
 	(make-default-buffers)
+        (set-buffer (get-buffer "*messages*"))
 	;; for the scratch buffer
 	(set-buffer (get-buffer "*scratch*"))
         (insert *initial-scratch-message*)
@@ -21,13 +41,13 @@
         (setf (buffer-modified-p (current-buffer)) nil
               (buffer-undo-list (current-buffer)) nil)
         (goto-char (point-min))
-	(set-major-mode *lisp-interaction-mode*)
+	(set-major-mode '*lisp-interaction-mode*)
 	(init-command-arg-types)
 	(setf *frame-list* (list #+(or cmu sbcl) (make-default-tty-frame (get-buffer "*scratch*"))
 				 #+clisp (make-default-clisp-frame (get-buffer "*scratch*"))
                                  #+mcl (make-default-mcl-frame (get-buffer "*scratch*"))
 				 #+movitz (make-default-movitz-frame (get-buffer "*scratch*")))
-	      *current-frame* (car *frame-list*)
+	      *selected-frame* (car *frame-list*)
 	      *process-list* nil)
 	(make-global-keymaps)
 	(catch 'lice-quit 

@@ -8,14 +8,6 @@
   "All buffers managed by lice. buffers are sorted from most recently
 accessed to least. the CAR is the most recent buffer.")
 
-(defvar *current-buffer* nil
-  "When this buffer is non-nil, it contains the current buffer. Calls
-to `current-buffer' return this buffer. Otherwise, `current-buffer'
-returns the current frames's current window's buffer.
-
-This variable should never be set using `setq' or `setf'. Bind it with
-`let' for as long as it needs to be set.")
-
 (defvar *inhibit-read-only* nil
 "*Non-nil means disregard read-only status of buffers or characters.
 If the value is t, disregard `buffer-read-only' and all `read-only'
@@ -23,119 +15,16 @@ text properties.  If the value is a list, disregard `buffer-read-only'
 and disregard a `read-only' text property if the property value
 is a member of the list.")
 
-(defclass pstring ()
-  ((data :type string :initarg :data :accessor pstring-data)
-   (intervals :type (or null interval) :initform nil :initarg :intervals :accessor intervals))
-  (:documentation "The lice string implementation."))
+(defvar *default-major-mode* 'fundamental-mode
+  "*Major mode for new buffers.  Defaults to `fundamental-mode'.
+A value of nil means use current buffer's major mode,
+provided it is not marked as \"special\".
 
-(defmethod print-object ((obj pstring) stream)
-  (print-unreadable-object (obj stream :type t :identity t)
-    (format stream "~s" (pstring-data obj))))
-
-(defun pstring-length (ps)
-  "Return the length of the string in PS"
-  (declare (type pstring ps))
-  (length (pstring-data ps)))
-
-(defclass base-buffer ()
-  ((file :type (or null pathname) :initarg :file :accessor buffer-file)
-   (name :type string :initarg :name :accessor buffer-name)
-   ;; mode-line
-   (mode-line :type list :initarg :mode-line :initform nil :accessor buffer-mode-line)
-   (mode-line-string :type string :initform "" :accessor buffer-mode-line-string)
-   (modified :type boolean :initform nil :accessor buffer-modified-p)
-   (read-only :type boolean :initform nil :accessor buffer-read-only)
-   (tick :type integer :initform 0 :accessor buffer-modified-tick :documentation
-	 "The buffer's tick counter. It is incremented for each change
-in text.")
-   (display-count :type integer :initform 0 :accessor buffer-display-count :documentation
-		  "The buffer's display counter. It is incremented each time it
-is displayed in a window.")
-   (display-time :type integer :initform 0 :accessor buffer-display-time :documentation
-		 "The last time the buffer was switched to in a window.")
-   (major-mode :type major-mode :initarg :major-mode :accessor buffer-major-mode)
-   (local-map :initform nil :initarg :local-map :accessor buffer-local-map :documentation
-           "The keymap local to the buffer. This overrides major mode bindings.")
-   (locals-variables :type hash-table :initform (make-hash-table) :accessor buffer-local-variables)
-   (locals :type hash-table :initform (make-hash-table) :accessor buffer-locals))
-  (:documentation "A Buffer."))
-
-;; undo structures used to record types of undo information. This is
-;; an alternative to the cons cells gnu emacs uses which I find
-;; obscure.
-(defstruct undo-entry-insertion
-  beg end)
-(defstruct undo-entry-delete
-  text position)
-(defstruct undo-entry-modified
-  time)
-(defstruct undo-entry-property
-  prop value beg end)
-(defstruct undo-entry-apply
-  function args)
-(defstruct undo-entry-selective
-  delta beg end function args)
-(defstruct undo-entry-marker
-  marker distance)
-
-(defclass buffer (base-buffer)
-  ((point :type marker :initarg :point :accessor buffer-point)
-   (mark :type marker :initarg :mark :accessor buffer-mark-marker)
-   ;; A string containing the raw buffer
-   (data :type (array character 1) :initarg :data :accessor buffer-data)
-   (intervals :type (or null interval) :initform nil :initarg :intervals :accessor intervals)
-   (gap-start :type integer :initarg :gap-start :accessor buffer-gap-start)
-   (gap-size :type integer :initarg :gap-size :accessor buffer-gap-size)
-   (markers :type list :initform '() :accessor buffer-markers)
-   (auto-save-modified :type integer :initform 0 :accessor buffer-auto-save-modified)
-   (modiff :type integer :initform 0 :accessor buffer-modiff)
-   ;;(syntax-table :initform *standard-syntax-table* :accessor buffer-syntax-table)
-   (undo-list :initform '() :accessor buffer-undo-list
-              :documentation "List of undo entries in current buffer.
-Recent changes come first; older changes follow newer.
-
-An entry (BEG . END) represents an insertion which begins at
-position BEG and ends at position END.
-
-An entry (TEXT . POSITION) represents the deletion of the string TEXT
-from (abs POSITION).  If POSITION is positive, point was at the front
-of the text being deleted; if negative, point was at the end.
-
-An entry (t HIGH . LOW) indicates that the buffer previously had
-\"unmodified\" status.  HIGH and LOW are the high and low 16-bit portions
-of the visited file's modification time, as of that time.  If the
-modification time of the most recent save is different, this entry is
-obsolete.
-
-An entry (nil PROPERTY VALUE BEG . END) indicates that a text property
-was modified between BEG and END.  PROPERTY is the property name,
-and VALUE is the old value.
-
-An entry (apply FUN-NAME . ARGS) means undo the change with
-\(apply FUN-NAME ARGS).
-
-An entry (apply DELTA BEG END FUN-NAME . ARGS) supports selective undo
-in the active region.  BEG and END is the range affected by this entry
-and DELTA is the number of bytes added or deleted in that range by
-this change.
-
-An entry (MARKER . DISTANCE) indicates that the marker MARKER
-was adjusted in position by the offset DISTANCE (an integer).
-
-An entry of the form POSITION indicates that point was at the buffer
-location given by the integer.  Undoing an entry of this form places
-point at POSITION.
-
-nil marks undo boundaries.  The undo command treats the changes
-between two undo boundaries as a single step to be undone.
-
-If the value of the variable is t, undo information is not recorded.
-"))
-  (:documentation "A text Buffer."))
-
-(defmethod print-object ((obj buffer) stream)
-  (print-unreadable-object (obj stream :type t :identity t)
-    (format stream "~a" (buffer-name obj))))
+When a mode is used by default, `find-file' switches to it
+before it reads the contents into the buffer and before
+it finishes setting up the buffer.  Thus, the mode and
+its hooks should not expect certain variables such as
+`buffer-read-only' and `buffer-file-coding-system' to be set up.")
 
 (define-condition args-out-of-range (lice-condition)
   () (:documentation "Raised when some arguments (usually relating to a
@@ -160,264 +49,9 @@ If you set the marker not to point anywhere, the buffer will have no mark."
   (buffer-mark-marker buffer))
 
 
-;;; buffer locals
+;;; gap basics
 
-(defstruct buffer-local-binding
-  symbol value local-p doc-string)
-
-(defvar *global-buffer-locals* (make-hash-table)
-  "The default values of buffer locals and a hash table containing all possible buffer locals")
-
-(defun buffer-local-exists-p (symbol)
-  (multiple-value-bind (v b) (gethash symbol *global-buffer-locals*)
-    (declare (ignore v))
-    b))  
-
-(defun get-buffer-local-create (symbol default-value &optional doc-string)
-  (if (buffer-local-exists-p symbol)
-      (gethash symbol *global-buffer-locals*)
-      (setf (gethash symbol *global-buffer-locals*)
-            (make-buffer-local-binding :symbol symbol
-                                       :value default-value
-                                       :doc-string doc-string))))
-
-(defmacro define-buffer-local (symbol default-value &optional doc-string)
-  "buffer locals are data hooks you can use to store values per
-buffer. Use them when building minor and major modes. You
-generally want to define them with this so you can create a
-docstring for them. there is also `get-buffer-local-create'."
-  `(progn
-     (when (boundp ',symbol)
-       (warn "Symbol ~s is already bound. Existing uses of symbol will not be buffer local." ',symbol)
-       (makunbound ',symbol))
-     (define-symbol-macro ,symbol (buffer-local ',symbol))
-     (get-buffer-local-create ',symbol ,default-value ,doc-string)))
-
-(defun (setf buffer-local) (value symbol)
-  "Set the value of the buffer local in the current buffer."
-  ;; create a global buffer local entry if needed.
-  (let ((global-binding (get-buffer-local-create symbol value)))
-    ;; if the symbol becomes buffer local when set or it has a buffer
-    ;; value
-    (if (or (buffer-local-binding-local-p global-binding)
-            (second (multiple-value-list
-                     (gethash symbol (buffer-locals *current-buffer*)))))
-        ;; set the buffer's value
-        (setf (gethash symbol (buffer-locals *current-buffer*)) value)
-        ;; set the global value
-        (setf (buffer-local-binding-value global-binding) value))))
-
-(defun buffer-local (symbol)
-  "Return the value of the buffer local symbol. If none exists
-for the current buffer then use the global one. If that doesn't
-exist, throw an error."
-  (multiple-value-bind (v b) (gethash symbol (buffer-locals *current-buffer*))
-    (if b
-	v
-	(multiple-value-bind (v b) (gethash symbol *global-buffer-locals*)
-	  (if b
-              (buffer-local-binding-value v)
-              (error "No binding for buffer-local ~s" symbol))))))
-
-(defun make-local-variable (symbol)
-  "Make VARIABLE have a separate value in the current buffer.
-Other buffers will continue to share a common default value.
-\(The buffer-local value of VARIABLE starts out as the same value
-VARIABLE previously had.  If VARIABLE was void, it remains void.\)
-Return VARIABLE.
-
-If the variable is already arranged to become local when set,
-this function causes a local value to exist for this buffer,
-just as setting the variable would do.
-
-Unlike GNU/Emacs This function does not return
-VARIABLE. See alse `(SETF MAKE-LOCAL-VARIABLE)'.
-
-See also `make-variable-buffer-local' and `define-buffer-local'.
-
-Do not use `make-local-variable' to make a hook variable buffer-local.
-Instead, use `add-hook' and specify t for the LOCAL argument."
-  (setf (gethash symbol (buffer-locals *current-buffer*)) (buffer-local symbol))
-  ;; only setq and setf expand the symbol-macro properly, so we can't
-  ;; return the symbol.
-  nil)
-
-(defun (setf make-local-variable) (value symbol)
-  "Make the symbol local to the current buffer like
-`make-local-variable' and also set its value in the buffer."
-  (setf (gethash symbol (buffer-locals *current-buffer*)) value))
-
-(defun make-variable-buffer-local (variable)
-  "Make VARIABLE become buffer-local whenever it is set.
-At any time, the value for the current buffer is in effect,
-unless the variable has never been set in this buffer,
-in which case the default value is in effect.
-Note that binding the variable with `let', or setting it while
-a `let'-style binding made in this buffer is in effect,
-does not make the variable buffer-local.  Return VARIABLE.
-
-In most cases it is better to use `make-local-variable',
-which makes a variable local in just one buffer.
-
-The function `default-value' gets the default value and `set-default' sets it."
-  (setf (buffer-local-binding-local-p (gethash variable *global-buffer-locals*)) t))
-
-(defun default-value (symbol)
-  "Return SYMBOL's default value.
-This is the value that is seen in buffers that do not have their own values
-for this variable.  The default value is meaningful for variables with
-local bindings in certain buffers."
-  (buffer-local-binding-value (gethash symbol *global-buffer-locals*)))
-
-(defun (setf default-value) (value symbol)
-  "Set symbol's default value to value.  symbol and value are evaluated.
-The default value is seen in buffers that do not have their own values
-for this variable."
-  (setf (buffer-local-binding-value (gethash symbol *global-buffer-locals*)) value)  )
-
-(depricate set-default (setf default-value))
-(defun set-default (symbol value)
-  "Set symbol's default value to value.  symbol and value are evaluated.
-The default value is seen in buffers that do not have their own values
-for this variable."
-  (setf (default-value symbol) value))
-
-(define-buffer-local *buffer-invisibility-spec* nil
-  "Invisibility spec of this buffer.
-The default is t, which means that text is invisible
-if it has a non-nil `invisible' property.
-If the value is a list, a text character is invisible if its `invisible'
-property is an element in that list.
-If an element is a cons cell of the form (PROP . ELLIPSIS),
-then characters with property value PROP are invisible,
-and they have an ellipsis as well if ELLIPSIS is non-nil.")
-
-(define-buffer-local *selective-display* nil
-  "Non-nil enables selective display.
-An Integer N as value means display only lines
-that start with less than n columns of space.
-A value of t means that the character ^M makes itself and
-all the rest of the line invisible; also, when saving the buffer
-in a file, save the ^M as a newline.")
-
-
-
-;;; buffer related conditions
-
-;;(define-condition end-of-buffer)
-
-
-;;; Markers
-
-(deftype marker-insertion-type () '(member :before :after))
-
-(defclass marker ()
-  ((position :type integer :initform 0 :accessor marker-position)
-   (buffer :type (or buffer null) :initform nil :accessor marker-buffer)
-   (insertion-type :type marker-insertion-type :initform :after :accessor marker-insertion-type))
-  (:documentation "A Marker"))
-
-(defmethod print-object ((obj marker) stream)
-  (print-unreadable-object (obj stream :type t :identity t)
-    (format stream "~a" (marker-position obj))))
-
-(defgeneric ensure-number (thing)
-  (:documentation "Call this function when THING could be a number or a marker or...?"))
-
-(defmethod ensure-number ((thing number))
-  thing)
-
-(defmethod ensure-number ((thing marker))
-  (marker-position thing))
-
-(defun copy-marker (marker &optional (type :after))
-  "Return a new marker pointing at the same place as MARKER.
-If argument is a number, makes a new marker pointing
-at that position in the current buffer.
-**The optional argument TYPE specifies the insertion type of the new marker;
-**see `marker-insertion-type'."
-  (check-type marker (or marker integer))
-  (check-type type marker-insertion-type)
-  (let ((new (make-marker)))
-    (set-marker new (ensure-number marker)
-                (if (typep marker 'marker)
-                    (marker-buffer marker)
-                    (current-buffer)))
-    (setf (marker-insertion-type new) type)
-    new))
-
-(defun make-marker ()
-  "Return a newly allocated marker which does not point anywhere."
-  (make-instance 'marker))
-
-(defun unchain-marker (marker)
-  (when (marker-buffer marker)
-    (setf (buffer-markers (marker-buffer marker))
-          (delete marker (buffer-markers (marker-buffer marker)) :key #'weak-pointer-value))))
-
-(defun chain-marker (marker buffer)
-  (push (make-weak-pointer marker) (buffer-markers buffer)))  
-
-(defun set-marker (marker position &optional (buffer (current-buffer)))
-  ;; remove the marker from its buffer, when appropriate
-  (when (null position)
-    (unchain-marker marker)
-    (return-from set-marker marker))
-  ;; XXX handle dead buffers
-
-  ;; normalize pos
-  (setf (marker-position marker) (min (max position (begv buffer)) (zv buffer)))
-
-  ;; update buffer stuff
-  (unless (eq (marker-buffer marker) buffer)
-    (unchain-marker marker)
-    (setf (marker-buffer marker) buffer)
-    (chain-marker marker buffer))
-  marker)
-
-(defun update-markers-del (buffer start size)
-  ;; FIXME: insertion-type
-  ;; First get rid of stale markers
-  (purge-markers buffer)
-  (dolist (wp (buffer-markers buffer))
-    (let ((m (weak-pointer-value wp)))
-      ;; paranoia, maybe the GC freed some stuff after the marker
-      ;; purge.
-      (when m
-	;; markers are before the marker-position.
-	(cond ((>= (marker-position m) (+ start size))
-	       (decf (marker-position m) size))
-	      ((> (marker-position m) start)
-	       (setf (marker-position m) start)))))))
-
-(defun update-markers-ins (buffer start size)
-  ;; FIXME: insertion-type
-  ;; First get rid of stale markers
-  (purge-markers buffer)
-  (dolist (wp (buffer-markers buffer))
-    (let ((m (weak-pointer-value wp)))
-      ;; markers are before the marker-position.
-      (when (and m (> (marker-position m) start)
-		 (incf (marker-position m) size))))))
-
-(defun purge-markers (buffer)
-  "Remove GC'd markers."
-  (setf (buffer-markers buffer)
-	(delete-if (lambda (m)
-		     (multiple-value-bind (v c) (weak-pointer-value m)
-                       (declare (ignore v))
-		       (not c)))
-		   (buffer-markers buffer))))
-
-
-;;;
-
-(defun inc-buffer-tick (buffer)
-  "Increment the buffer's ticker."
-  (incf (buffer-modified-tick buffer)))
-
-;;; Some wrappers around replace
-
+;; Some wrappers around replace
 (defun move-subseq-left (seq from end to)
   "Move the subseq between from and end to before TO, which is assumed to be
 left of FROM."
@@ -437,9 +71,31 @@ end, inclusive, to before TO."
       (move-subseq-left seq from end to)
     (move-subseq-right seq from end to)))
   
+(defun gap-end (buf)
+  "The end of the gap. in aref space. gap-end is the first valid
+buffer character."
+  (declare (type buffer buf))
+  (+ (buffer-gap-start buf) (buffer-gap-size buf)))
+
 (defun fill-gap (buf)
   "For debugging purposes. fill the gap with _'s."
   (fill (buffer-data buf) #\_ :start (buffer-gap-start buf) :end (gap-end buf)))
+
+(defun buffer-aref-to-char (buf idx)
+  "Translate the index into the buffer data to the index excluding the gap."
+  (declare (type buffer buf)
+	   (type integer idx))
+  (if (>= idx (gap-end buf))
+      (- idx (buffer-gap-size buf))
+    idx))
+
+(defun buffer-char-to-aref (buf p)
+  ""
+  (declare (type buffer buf)
+	   (type integer p))
+  (if (>= p (buffer-gap-start buf))
+      (+ p (buffer-gap-size buf))
+    p))
 
 (defun gap-move-to (buf to)
   "A basic function to move the gap. TO is in aref coordinates and the
@@ -468,70 +124,6 @@ A___BCDEF
 ;;     ;; open a space for the gap
 ;;     (replace data data :start1 (+ to (buffer-gap-size buf)) :start2 to)
 ;;     (setf (buffer-gap-start buf) to)))
-
-(defun gap-end (buf)
-  "The end of the gap. in aref space. gap-end is the first valid
-buffer character."
-  (declare (type buffer buf))
-  (+ (buffer-gap-start buf) (buffer-gap-size buf)))
-
-(defmacro inc-aref (var buffer)
-  "increment VAR one character forward in BUFFER, avoiding the gap."
-  `(progn
-     (incf ,var)
-     (if (= (buffer-gap-start ,buffer) ,var)
-         (setf ,var (gap-end ,buffer)))))
-
-(defmacro inc-both (char-var aref-var buffer)
-  `(progn
-     (inc-aref ,aref-var ,buffer)
-     (incf ,char-var)))
-
-(defun aref-minus-1 (aref buffer)
-  (if (= (gap-end buffer) aref)
-      (1- (buffer-gap-start buffer))
-      (1- aref)))
-
-(defmacro dec-aref (var buffer)
-  "increment VAR one character forward in BUFFER, avoiding the gap."
-  `(setf ,var (aref-minus-1 ,var ,buffer)))
-
-(defmacro dec-both (char-var aref-var buffer)
-  `(progn
-     (dec-aref ,aref-var ,buffer)
-     (decf ,char-var)))
-
-;; (defun gap-close (buf)
-;;   "Move the gap to the end of the buffer."
-;;   (let ((gap-start (buffer-gap-start buf))
-;; 	(gap-end (gap-end buf)))
-;;     (setf (buffer-gap-start buf) (- (length (buffer-data buf)) (buffer-gap-size buf)))
-;;     (replace (buffer-data buf) (buffer-data buf) :start1 gap-start :start2 gap-end)))
-
-(defun grow-buffer-data (buf size)
-  "Grow the buffer data array to be SIZE. SIZE must be larger than before."
-  ;; MOVITZ doesn't have adjust-array
-  ;; ;; #\_ is used for debugging to represent the gap
-  ;; (adjust-array (buffer-data buf) size :initial-element #\_ :fill-pointer t)
-  (let ((newbuf (make-array size :initial-element #\_;;  :fill-pointer t
-			    :element-type 'character)))
-    (replace newbuf (buffer-data buf))
-    (setf (buffer-data buf) newbuf)))
-
-(defun gap-extend (buf size)
-  "Extend the gap by SIZE characters."
-  (let ((new-size (+ (length (buffer-data buf)) size))
-	(old-end (gap-end buf))
-	(old-size (buffer-size buf))
-	(data (buffer-data buf)))
-    (setf data (grow-buffer-data buf new-size))
-    (incf (buffer-gap-size buf) size)
-    (unless (= (buffer-gap-start buf) old-size)
-      (replace data data
-	       :start1 (gap-end buf)
-	       :start2 old-end))
-    ;; for debugging, mark the gap
-    (fill-gap buf)))
 
 (defun buffer-size (buf)
   "Return the length of the buffer not including the gap."
@@ -570,22 +162,39 @@ buffer character."
   ;; TODO: handle buffer narrowing
   (buffer-char-to-aref buf (buffer-max buf)))
 
-(defun point (&optional (buffer (current-buffer)))
+(defmacro inc-aref (var buffer)
+  "increment VAR one character forward in BUFFER, avoiding the gap."
+  `(progn
+     (incf ,var)
+     (if (= (buffer-gap-start ,buffer) ,var)
+         (setf ,var (gap-end ,buffer)))))
+
+(defmacro inc-both (char-var aref-var buffer)
+  `(progn
+     (inc-aref ,aref-var ,buffer)
+     (incf ,char-var)))
+
+(defun aref-minus-1 (aref buffer)
+  (if (= (gap-end buffer) aref)
+      (1- (buffer-gap-start buffer))
+      (1- aref)))
+
+(defmacro dec-aref (var buffer)
+  "increment VAR one character forward in BUFFER, avoiding the gap."
+  `(setf ,var (aref-minus-1 ,var ,buffer)))
+
+(defmacro dec-both (char-var aref-var buffer)
+  `(progn
+     (dec-aref ,aref-var ,buffer)
+     (decf ,char-var)))
+
+(defun pt (&optional (buffer (current-buffer)))
   "Return the point in the current buffer."
   (marker-position (buffer-point buffer)))
 
-(defun point-marker (&optional (buffer (current-buffer)))
-  "Return value of point, as a marker object."
-  (buffer-point buffer))
-
-(defun point-min (&optional (buffer (current-buffer)))
-  "Return the minimum permissible value of point in the current buffer."
-  (declare (ignore buffer))
-  0)
-
-(defun point-max (&optional (buffer (current-buffer)))
-  "Return the maximum permissible value of point in the current buffer."
-  (buffer-size buffer))
+(defun buffer-point-aref (buf)
+  "Return the buffer point in aref coordinates."
+  (buffer-char-to-aref buf (pt buf)))
 
 (defun set-point-both (buffer char-pos aref-pos)
   "Set point in BUFFER to CHARPOS, which corresponds to byte
@@ -598,25 +207,10 @@ before an intangible character, move to an ok place."
 (defun set-point (char-pos &optional (buffer (current-buffer)))
   (set-point-both buffer char-pos nil))
 
-(defun goto-char (position &optional (buffer (current-buffer)))
-  "Set point to POSITION, a number."
-  (check-number-coerce-marker position)
-  (when (and (>= position (point-min buffer))
-	     (<= position (point-max buffer)))
-    (set-point position buffer)))
-
-;; (defun buffer-char-before-point (buf p)
-;;   "The character at the point P in buffer BUF. P is in char space."
-;;   (declare (type buffer buf)
-;; 	   (type integer p))
-;;   (let ((aref (buffer-char-to-aref buf p)))
-;;       (when (< aref (length (buffer-data buf)))
-;; 	(aref (buffer-data buf) aref))))
-
 (defun buffer-char-after (buf p)
   "The character at the point P in buffer BUF. P is in char space."
   (declare (type buffer buf)
-	   (type integer p))
+	   (type (integer 0 *) p))
   (let ((aref (buffer-char-to-aref buf p)))
       (when (and (>= aref 0)
 		 (< aref (length (buffer-data buf))))
@@ -625,320 +219,115 @@ before an intangible character, move to an ok place."
 (defun buffer-char-before (buf p)
   (buffer-char-after buf (1- p)))
 
-(defun char-after (&optional (pos (point)))
-  "Return character in current buffer at position POS.
-***POS is an integer or a marker.
-***If POS is out of range, the value is nil."
-  (buffer-char-after (current-buffer) pos))
-
-(defun char-before (&optional (pos (point)))
-  "Return character in current buffer preceding position POS.
-***POS is an integer or a marker.
-***If POS is out of range, the value is nil."
-  (char-after (1- pos)))
-
-(defun buffer-aref-to-char (buf idx)
-  "Translate the index into the buffer data to the index excluding the gap."
-  (declare (type buffer buf)
-	   (type integer idx))
-  (if (>= idx (gap-end buf))
-      (- idx (buffer-gap-size buf))
-    idx))
-
-(defun buffer-char-to-aref (buf p)
-  ""
-  (declare (type buffer buf)
-	   (type integer p))
-  (if (>= p (buffer-gap-start buf))
-      (+ p (buffer-gap-size buf))
-    p))
-
-(defun buffer-point-aref (buf)
-  "Return the buffer point in aref coordinates."
-  (buffer-char-to-aref buf (point buf)))
 
 (defun buffer-fetch-char (aref buf)
   (aref (buffer-data buf) aref))
 
-(defun string-to-vector (s)
-  "Return a resizable vector containing the elements of the string s."
-  (declare (string s))
-  (make-array (length s)
-	      :initial-contents s
-	      :element-type 'character
-	      :adjustable t))
+
+;;; Markers
 
+(defgeneric ensure-number (thing)
+  (:documentation "Call this function when THING could be a number or a marker or...?"))
 
-(defgeneric buffer-insert (buffer object)
-  (:documentation "Insert OBJECT into BUFFER at the current point."))
+(defmethod ensure-number ((thing number))
+  thing)
 
-(defmethod buffer-insert :after ((buf buffer) object)
-  "Any object insertion modifies the buffer."
-  (declare (ignore object))
-  (setf (buffer-modified-p buf) t))
+(defmethod ensure-number ((thing marker))
+  (marker-position thing))
 
-(defmethod buffer-insert ((buf buffer) (char character))
-  "Insert a single character into buffer before point."
-  ;; Resize the gap if needed
-  (if (<= (buffer-gap-size buf) 1)
-      (gap-extend buf 100))
-  ;; Move the gap to the point
-  (unless (= (point buf) (buffer-gap-start buf))
-    (gap-move-to buf (buffer-point-aref buf)))
-  (update-markers-ins buf (point buf) 1)
-  ;; undo
-  (record-insert (point buf) 1 buf)
-  ;; set the character
-  (setf (aref (buffer-data buf) (buffer-gap-start buf)) char)
-  ;; move the gap forward
-  (incf (buffer-gap-start buf))
-  (decf (buffer-gap-size buf))
-  ;; expand the buffer intervals
-  (offset-intervals buf (point buf) 1))
+(defmacro check-number-coerce-marker (marker-var)
+  "Verify that MARKER-VAR is a number or if it's a marker then
+set the var to the marker's position."
+  `(progn
+     (check-type ,marker-var (or marker (integer 0 *)))
+     (when (typep ,marker-var 'marker)
+       (setf ,marker-var (marker-position ,marker-var)))))
 
-(defmethod buffer-insert ((buf buffer) (string string))
-  ;; resize
-  (when (<= (buffer-gap-size buf) (length string))
-    (gap-extend buf (+ (length string) 100)))
-  ;; move the gap to the point
-  (unless (= (point buf) (buffer-gap-start buf))
-    (gap-move-to buf (buffer-point-aref buf)))
-  (update-markers-ins buf (point buf) (length string))
-  ;; undo
-  (record-insert (point buf) (length string) buf)
-  ;; insert chars
-  (replace (buffer-data buf) string :start1 (buffer-gap-start buf))
-  (incf (buffer-gap-start buf) (length string))
-  (decf (buffer-gap-size buf) (length string))
-  ;; expand the buffer intervals
-  (offset-intervals buf (point buf) (length string)))
+(defun make-marker ()
+  "Return a newly allocated marker which does not point anywhere."
+  (make-instance 'marker))
 
-(defmethod buffer-insert ((buf buffer) (string pstring))
-  ;; insert string
-  (buffer-insert buf (pstring-data string))
-  ;; insert properties
-  (graft-intervals-into-buffer (intervals string) 
-			       (point buf)
-			       (pstring-length string)
-			       buf
-			       t))
+(defun unchain-marker (marker)
+  (when (marker-buffer marker)
+    (setf (buffer-markers (marker-buffer marker))
+          (delete marker (buffer-markers (marker-buffer marker)) :key #'weak-pointer-value))))
 
-(defgeneric insert-move-point (buffer object)
-  (:documentation "Insert OBJECT into BUFFER at the current point. Move the point
-forward by its length."))
+(defun chain-marker (marker buffer)
+  (push (make-weak-pointer marker) (buffer-markers buffer)))  
 
-(defmethod insert-move-point ((buffer buffer) (object character))
-  (buffer-insert buffer object)
-  (incf (marker-position (buffer-point buffer))))
+(defun set-marker (marker position &optional (buffer (current-buffer)))
+  ;; remove the marker from its buffer, when appropriate
+  (when (null position)
+    (unchain-marker marker)
+    (return-from set-marker marker))
+  ;; XXX handle dead buffers
 
-(defmethod insert-move-point ((buffer buffer) (object string))
-  (buffer-insert buffer object)
-  (incf (marker-position (buffer-point buffer)) (length object)))
+  ;; normalize pos
+  (setf (marker-position marker) (min (max position (begv buffer)) (zv buffer)))
 
-(defmethod insert-move-point ((buffer buffer) (object pstring))
-  (buffer-insert buffer object)
-  (incf (marker-position (buffer-point buffer)) (pstring-length object)))
+  ;; update buffer stuff
+  (unless (eq (marker-buffer marker) buffer)
+    (unchain-marker marker)
+    (setf (marker-buffer marker) buffer)
+    (chain-marker marker buffer))
+  marker)
 
-(defun insert (&rest objects)
-  "Insert the arguments, either strings or characters, at point.
-Point and before-insertion markers move forward to end up after the
-inserted text. Any other markers at the point of insertion remain
-before the text."
-  (dolist (o objects)
-    (insert-move-point (current-buffer) o)))
+(defun copy-marker (marker &optional (type :after))
+  "Return a new marker pointing at the same place as MARKER.
+If argument is a number, makes a new marker pointing
+at that position in the current buffer.
+**The optional argument TYPE specifies the insertion type of the new marker;
+**see `marker-insertion-type'."
+  (check-type marker (or marker integer))
+  (check-type type marker-insertion-type)
+  (let ((new (make-marker)))
+    (set-marker new (ensure-number marker)
+                (if (typep marker 'marker)
+                    (marker-buffer marker)
+                    (current-buffer)))
+    (setf (marker-insertion-type new) type)
+    new))
 
-(defun buffer-delete (buf p length)
-  "Deletes chars from point to point + n. If N is negative, deletes backwards."
-  (cond ((< length 0)
-	 (gap-move-to buf (buffer-char-to-aref buf p))
-	 (let* ((new (max 0 (+ (buffer-gap-start buf) length)))
-		(capped-size (- (buffer-gap-start buf) new)))
-	   (update-markers-del buf new capped-size)
-           (record-delete new (buffer-substring new (+ new capped-size)))
-           (adjust-intervals-for-deletion buf new capped-size)
-	   (incf (buffer-gap-size buf) capped-size)
-	   (setf (buffer-gap-start buf) new)))
-	 ((> length 0)
-	  (unless (>= p (zv buf))
-	    ;; can't delete forward if we're at the end of the buffer.
-	    (gap-move-to buf (buffer-char-to-aref buf p))
-	    ;; Make sure the gap size doesn't grow beyond the buffer size.
-	    (let ((capped-size (- (min (+ (gap-end buf) length)
-				       (length (buffer-data buf)))
-				  (gap-end buf))))
-              (record-delete p (buffer-substring p (+ p capped-size)))
-	      (incf (buffer-gap-size buf) capped-size)
-	      (update-markers-del buf p capped-size)
-              (adjust-intervals-for-deletion buf p capped-size)))))
-  (setf (buffer-modified-p buf) t)
-  ;; debuggning
-  (fill-gap buf))
+(defun purge-markers (buffer)
+  "Remove GC'd markers."
+  (setf (buffer-markers buffer)
+	(delete-if (lambda (m)
+		     (multiple-value-bind (v c) (weak-pointer-value m)
+                       (declare (ignore v))
+		       (not c)))
+		   (buffer-markers buffer))))
 
-(defun buffer-erase (&optional (buf (current-buffer)))
-  ;; update properties
-  (record-delete (begv buf) (buffer-substring (begv buf) (zv buf) buf) buf)
-  (adjust-intervals-for-deletion buf 0 (buffer-size buf))
-  (update-markers-del buf 0 (buffer-size buf))
-  ;; expand the gap to take up the whole buffer
-  (setf (buffer-gap-start buf) 0
-	(buffer-gap-size buf) (length (buffer-data buf))
-	(marker-position (buffer-point buf)) 0
-	(buffer-modified-p buf) t)
-  ;; debugging
-  (fill-gap buf))
+(defun update-markers-del (buffer start size)
+  ;; FIXME: insertion-type
+  ;; First get rid of stale markers
+  (purge-markers buffer)
+  (dolist (wp (buffer-markers buffer))
+    (let ((m (weak-pointer-value wp)))
+      ;; paranoia, maybe the GC freed some stuff after the marker
+      ;; purge.
+      (when m
+	;; markers are before the marker-position.
+	(cond ((>= (marker-position m) (+ start size))
+	       (decf (marker-position m) size))
+	      ((> (marker-position m) start)
+	       (setf (marker-position m) start)))))))
 
-(defun scan-buffer (buffer target start end count)
-"Search for COUNT instances of the character TARGET between START and END.
+(defun update-markers-ins (buffer start size)
+  ;; FIXME: insertion-type
+  ;; First get rid of stale markers
+  (purge-markers buffer)
+  (dolist (wp (buffer-markers buffer))
+    (let ((m (weak-pointer-value wp)))
+      ;; markers are before the marker-position.
+      (when (and m (> (marker-position m) start)
+		 (incf (marker-position m) size))))))
 
-If COUNT is positive, search forwards; END must be >= START.
-If COUNT is negative, search backwards for the -COUNTth instance;
-   END must be <= START.
-If COUNT is zero, do anything you please; run rogue, for all I care.
+
+;;;
 
-If END is NIL, use BEGV or ZV instead, as appropriate for the
-direction indicated by COUNT.
-
-If we find COUNT instances, return the
-position past the COUNTth match and 0.  Note that for reverse motion
-this is not the same as the usual convention for Emacs motion commands.
-
-If we don't find COUNT instances before reaching END, return END
-and the number of TARGETs left unfound."
-  (let ((shortage (abs count))
-        last)
-    (if (> count 0)
-        (setf end (or end (zv buffer)))
-        (setf end (or end (begv buffer))))
-    (setf start (buffer-char-to-aref buffer start)
-          end (buffer-char-to-aref buffer end))
-    (loop while (and (> count 0)
-                     (/= start end)) do
-         (setf start
-               (if (< start (buffer-gap-start buffer))
-                   (or (position target (buffer-data buffer) :start start :end (min end (buffer-gap-start buffer)))
-                       (and (> end (gap-end buffer))
-                            (position target (buffer-data buffer) :start (gap-end buffer) :end end)))
-                   (position target (buffer-data buffer) :start start :end end)))
-         (if start
-             (setf start (1+ start)
-                   last start
-                   count (1- count)
-                   shortage (1- shortage))
-             (setf start end)))
-    (loop while (and (< count 0)
-                     (/= start end)) do
-         (setf start
-               (if (> start (buffer-gap-start buffer))
-                   (or (position target (buffer-data buffer) :start (max end (gap-end buffer)) :end start :from-end t)
-                       (and (< end (buffer-gap-start buffer))
-                            (position target (buffer-data buffer) :start end :end (buffer-gap-start buffer) :from-end t)))
-                   (position target (buffer-data buffer) :start end :end start :from-end t)))
-         (if start
-             (setf last (+ start 1) ; match emacs functionality
-                   count (1+ count)
-                   shortage (1- shortage))
-             (setf start end)))
-    (if (zerop count)
-        (values (and last (buffer-aref-to-char buffer last)) 0)
-        (values (buffer-aref-to-char buffer end) shortage))))
-
-(defun find-before-next-newline (from to cnt)
-  "Like find_next_newline, but returns position before the newline,
-not after, and only search up to TO.  This isn't just
-find_next_newline (...)-1, because you might hit TO."
-  (multiple-value-bind (pos shortage) (scan-buffer (current-buffer) #\Newline from to cnt)
-    (when (zerop shortage)
-      (decf pos))
-    pos))
-
-(defun buffer-scan-newline (buf start limit count)
-  "Search BUF for COUNT newlines with a limiting point at LIMIT,
-starting at START. Returns the point of the last newline or limit and
-number of newlines found. START and LIMIT are inclusive."
-  (declare (type buffer buf)
-	   (type integer start limit count))
-  (labels ((buffer-scan-bk (buf start limit count)
-	     "count is always >=0. start >= limit."
-	     (let* ((start-aref (buffer-char-to-aref buf start))
-		    (limit-aref (buffer-char-to-aref buf limit))
-		    (ceiling (if (>= start-aref (gap-end buf))
-				 (max limit-aref (gap-end buf))
-                                 limit-aref))
-		    (i 0)
-		    ;; :END is not inclusive but START is.
-		    (start (1+ start-aref))
-		    p)
-	       (loop
-		;; Always search at least once
-		(setf p (position #\Newline (buffer-data buf) 
-				  :start ceiling :end start :from-end t))
-		(if p
-		    (progn
-		      ;; Move start. Note that start isn't set to (1+ p)
-		      ;; because we don't want to search p again.
-		      (setf start p)
-		      ;; Count the newline
-		      (incf i)
-		      ;; Have we found enough newlines?
-		      (when (>= i count)
-			(return-from buffer-scan-bk (values (buffer-aref-to-char buf p)
-							    i))))
-		  ;; Check if we've searched up to the limit
-		  (if (= ceiling limit-aref)
-		      (return-from buffer-scan-bk (values limit i))
-		    ;; if not, skip past the gap
-		    (progn
-		      (setf ceiling limit-aref)
-		      (setf start (buffer-gap-start buf))))))))
-	   (buffer-scan-fw (buf start limit count)
-	     "count is always >=0. start >= limit."
-	     (let* ((start-aref (buffer-char-to-aref buf start))
-		    (limit-aref (1+ (buffer-char-to-aref buf limit)))
-		    (ceiling (if (< start (buffer-gap-start buf))
-				 (min limit-aref (buffer-gap-start buf))
-                                 limit-aref))
-		    (i 0)
-		    (start start-aref)
-		    p)
-	       (loop
-		;; Always search at least once
-		(setf p (position #\Newline (buffer-data buf) :start start :end ceiling))
-		(if p
-		    (progn
-		      ;; Move start. We don't want to search p again, thus the 1+.
-		      (setf start (1+ p))
-		      ;; Count the newline
-		      (incf i)
-		      ;; Have we found enough newlines?
-		      (when (>= i count)
-			(return-from buffer-scan-fw (values (buffer-aref-to-char buf p)
-							    i))))
-		  ;; Check if we've searched up to the limit
-		  (if (= ceiling limit-aref)
-		      (return-from buffer-scan-fw (values limit i))
-		    ;; if not, skip past the gap
-		    (progn
-		      (setf ceiling limit-aref)
-		      (setf start (gap-end buf)))))))))
-    ;; make sure start and limit are within the bounds
-    (setf start (max 0 (min start (1- (buffer-size buf))))
-	  limit (max 0 (min limit (1- (buffer-size buf)))))
-    ;; the search always fails on an empty buffer
-    (when (= (buffer-size buf) 0)
-      (return-from buffer-scan-newline (values limit 0)))
-    (cond ((> count 0)
-	   (dformat +debug-vv+ "scan-fw ~a ~a ~a~%" start limit count)
-	   (buffer-scan-fw buf start limit count))
-	  ((< count 0)
-	   (dformat +debug-vv+ "scan-bk ~a ~a ~a~%" start limit count)
-	   (buffer-scan-bk buf start limit (abs count)))
-	  ;; 0 means the newline before the beginning of the current
-	  ;; line. We need to handle the case where we are on a newline.
-	  (t 
-	   (dformat +debug-vv+ "scan-0 ~a ~a ~a~%" start limit count)
-	   (if (char= (buffer-char-after buf start) #\Newline)
-	       (buffer-scan-bk buf start limit 2)
-	     (buffer-scan-bk buf start limit 1))))))
+(defun inc-buffer-tick (buffer)
+  "Increment the buffer's ticker."
+  (incf (buffer-modified-tick buffer)))
 
 ;; ;;; more stuff
 
@@ -972,22 +361,13 @@ number of newlines found. START and LIMIT are inclusive."
 ;; FIXME: this is a parameter for debugging
 ;; FIXME: be more emacs-like or make it better so we don't just have
 ;; lambda functions that process data and return a string.
-(defparameter *mode-line-format* (list "--:" ;; fake it for hype
-				       (lambda (buffer)
-					 (format nil "~C~C"
-					      ;; FIXME: add read-only stuff
-					      (if (buffer-modified-p buffer)
-						  #\* #\-)
-					      (if (buffer-modified-p buffer)
-						  #\* #\-)))
-				       "  "
-				       (lambda (buffer)
-					 (format nil "~12,,,a" (buffer-name buffer)))
-				       "   "
-				       (lambda (buffer)
-					 (format nil "(~a)" 
-					      (major-mode-name (buffer-major-mode buffer)))))
-  "The default mode line format.")
+(defvar *default-mode-line-format* nil
+  "Default value of `mode-line-format' for buffers that don't override it.
+This is the same as (default-value 'mode-line-format).")
+
+(define-buffer-local *mode-line-format* nil
+  "The buffer's mode line format.")
+(make-variable-buffer-local '*mode-line-format*)
 
 (defgeneric mode-line-format-elem (buffer elem)
   (:documentation "Given the element found in the buffer mode-line,
@@ -1011,7 +391,7 @@ return a string that will be printed in the mode-line."))
   (setf (buffer-mode-line-string buffer) 
 	(format nil "~{~a~}" (mapcar (lambda (elem)
 				(mode-line-format-elem buffer elem))
-			      (buffer-mode-line buffer)))))
+			      (buffer-local '*mode-line-format* buffer)))))
 
 (defun truncate-mode-line (buffer len)
 "return the buffers mode-line trunctated to len. If the mode-line is
@@ -1020,6 +400,14 @@ shorter than len, it will be padded with -'s."
     (replace s (buffer-mode-line-string buffer))))
 
 ;;; Buffer query/creation
+
+(defun string-to-vector (s)
+  "Return a resizable vector containing the elements of the string s."
+  (declare (string s))
+  (make-array (length s)
+	      :initial-contents s
+	      :element-type 'character
+	      :adjustable t))
 
 (defgeneric get-buffer (name)
   (:documentation "Return the buffer named NAME. If there is no live
@@ -1051,13 +439,13 @@ The value is never nil."))
 			       ;; Currently a buffer has to have a gap
 			       ;; of at least size 1.
 			       :data (string-to-vector "_")
+                               :major-mode '*fundamental-mode*
 			       :gap-start 0
 			       :gap-size 1
-			       :mode-line *mode-line-format*
-			       :name name
-			       :major-mode *fundamental-mode*)))
+			       :name name)))
 	 (set-marker (buffer-point b) 0 b)
 	 (set-marker (mark-marker b) 0 b)
+         (setf (buffer-local '*mode-line-format* b) *default-mode-line-format*)
 	 (push b *buffer-list*)
 	 b))))
 
@@ -1132,31 +520,6 @@ See also `with-temp-file'."
   (setf *buffer-list* (delete buf *buffer-list*))
   (push buf *buffer-list*))
 
-(defun other-buffer (&optional (buffer (current-buffer)) visible-ok frame)
-  "Return most recently selected buffer other than BUFFER.
-Buffers not visible in windows are preferred to visible buffers,
-unless optional second argument VISIBLE-OK is non-nil.
-If the optional third argument FRAME is non-nil, use that frame's
-buffer list instead of the selected frame's buffer list.
-If no other buffer exists, the buffer `*scratch*' is returned.
-If BUFFER is omitted or nil, some interesting buffer is returned."
-  (declare (ignore frame))
-  ;; TODO: honour FRAME argument
-  (let* (vis
-         (match (loop for b in *buffer-list*
-                      unless (or (eq b buffer)
-                                 (char= (char (buffer-name b) 0) #\Space))
-		      if (and (not visible-ok)
-			      (get-buffer-window b))
-		      do (setf vis b)
-		      else return b)))
-    (or match
-        vis
-	(get-buffer-create "*scratch*"))))
-
-(define-buffer-local *mark-active* nil
-  "Non-nil means the mark and region are currently active in this buffer.")
-
 (defun mark (&optional force (buffer (current-buffer)))
   "Return BUFFER's mark value as integer; error if mark inactive.
 If optional argument FORCE is non-nil, access the mark value
@@ -1188,14 +551,6 @@ If START or END are marks, their positions will be used."
 	    (> end (buffer-max buffer)))
     (signal 'args-out-of-range))
   (values start end))
-
-(defun eobp (&optional (buffer (current-buffer)))
-  "Return T when the point is at the end of the buffer."
-  (= (buffer-max buffer) (point)))
-
-(defun bobp (&optional (buffer (current-buffer)))
-  "Return T when the point is at the beginning of the buffer."
-  (= (buffer-min buffer) (point)))
 
 (defun set-buffer (buffer)
   "Make the buffer BUFFER current for editing operations.
@@ -1265,45 +620,19 @@ To interactively change the default directory, use command `cd'.")
 ;; 		 (remhash k (buffer-local-variables buffer)))))
 ;;     (maphash #'set-it (buffer-local-variables buffer))))
 
-;;; reading from the buffer
-
-(defun read-from-buffer (&aux (buffer (current-buffer)))
-  "Read 1 sexp from the buffer at the current point, moving the point to the end of what was read"
-  (when (< (buffer-char-to-aref buffer (point buffer))
-	   (buffer-gap-start buffer))
-    (gap-move-to-point buffer))
-  (multiple-value-bind (obj pos)
-      (read-from-string (buffer-data buffer) t nil
-                        :start (buffer-char-to-aref buffer (point buffer)))
-    (set-point (buffer-aref-to-char buffer pos))
-    obj))
-
-(defun set-major-mode (mm)
-  "Set the current buffer's major mode."
-  ;; Call All inherited init functions
-  (mapc (lambda (m)
-          (set-major-mode (symbol-value m))) (major-mode-inherit-init mm))
-
-  ;; Now call this mm's init function
-  (when (major-mode-init mm)
-    (funcall (major-mode-init mm)))
-
-  ;; Finally, set the mode and call the hook
-  (setf (buffer-major-mode (current-buffer)) mm)
-  (run-hooks (major-mode-hook mm)))
-
 (defun major-mode ()
-  (buffer-major-mode (current-buffer)))
+  (symbol-value (buffer-major-mode (current-buffer))))
 
 (define-buffer-local *fill-column* 70
 "*Column beyond which automatic line-wrapping should happen.
 Interactively, you can set the buffer local value using \\[set-fill-column].")
 
-(defun buffer-list (&optional (frame (selected-frame)))
+(defun buffer-list (&optional frame)
   "Return a list of all existing live buffers.
 If the optional arg frame is a frame, we return the buffer list
 in the proper order for that frame: the buffers in FRAME's `buffer-list'
 frame parameter come first, followed by the rest of the buffers."
+  ;; FIXME: handle frame
   (declare (ignore frame))
   *buffer-list*)
 
@@ -1327,5 +656,33 @@ its value may not be a list of functions.")
   "*Column for the default indent-line-function to indent to.
 Linefeed indents to this column in Fundamental mode.")
 (make-variable-buffer-local 'left-margin)
+
+(defun make-buffer-string (start end props &optional (buffer (current-buffer)))
+  "Making strings from buffer contents.
+
+Return a Lisp_String containing the text of the current buffer from
+START to END. If text properties are in use and the current buffer has
+properties in the range specified, the resulting string will also have
+them, if PROPS is nonzero.
+
+We don't want to use plain old make_string here, because it calls
+make_uninit_string, which can cause the buffer arena to be
+compacted.  make_string has no way of knowing that the data has
+been moved, and thus copies the wrong data into the string.  This
+doesn't effect most of the other users of make_string, so it should
+be left as is.  But we should use this function when conjuring
+buffer substrings."
+  (declare (ignore props))
+  ;; If the gap intersects with the range we wanna grab, move it.
+  (if (= start end)
+      ""
+    (progn
+      (when (and (< start (buffer-gap-start buffer))
+		 (< (buffer-gap-start buffer) end))
+	(gap-move-to buffer start))
+      (dformat +debug-v+ "substring: ~a ~a ~a~%" start end (length (buffer-data buffer)))
+      (subseq (buffer-data buffer)
+	      (buffer-char-to-aref buffer start)
+	      (1+ (buffer-char-to-aref buffer (1- end)))))))
 
 (provide :lice-0.1/buffer)

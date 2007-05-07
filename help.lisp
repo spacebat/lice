@@ -1,6 +1,6 @@
 ;;; Documentation and help related commands
 
-(in-package :lice)
+(in-package "LICE")
 
 (defcommand describe-symbol ()
   "Display the full documentation of a symbol."

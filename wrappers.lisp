@@ -4,7 +4,10 @@
 ;;; To add support for a new CL implementation, an entry in each of
 ;;; these functions must be made for it.
 
-(in-package :lice)
+;; don't print the unable to optimize notes
+#+sbcl (declaim (sb-ext:muffle-conditions sb-ext:compiler-note))
+
+(in-package "LICE")
 
 ;;; Weak Pointers
 

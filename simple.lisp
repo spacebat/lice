@@ -1,4 +1,4 @@
-(in-package :lice)
+(in-package "LICE")
 
 (defvar *kill-ring* nil
   "The kill ring.")
@@ -39,20 +39,7 @@ If nil, don't change the value of `debug-on-error'."
 ;; 	       (point-max)))
 ;;     (decf (marker-position (buffer-point (current-buffer))) n))
 
-(defcommand forward-char ((&optional (n 1))
-			  :prefix)
-  "Move the point forward N characters in the current buffer."
-  (incf (marker-position (buffer-point (current-buffer))) n)
-  (cond ((< (point) (begv))
-	 (goto-char (begv))
-	 (signal 'beginning-of-buffer))
-	((> (point) (zv))
-	 (goto-char (zv))
-	 (signal 'end-of-buffer))))
 
-(defcommand backward-char ((&optional (n 1))
-			   :prefix)
-  (forward-char (- n)))
 
 (defun buffer-beginning-of-line ()
   "Return the point in the buffer that is the beginning of the line that P is on."
@@ -77,66 +64,6 @@ If nil, don't change the value of `debug-on-error'."
       (if (char= (char-after eol) #\Newline)
 	  eol
 	(1+ eol)))))
-
-(defun forward-line (n)
-  "Move n lines forward (backward if n is negative).
-Precisely, if point is on line I, move to the start of line I + n.
-If there isn't room, go as far as possible (no error).
-Returns the count of lines left to move.  If moving forward,
-that is n - number of lines moved; if backward, n + number moved.
-With positive n, a non-empty line at the end counts as one line
-  successfully moved (for the return value)."
-  (cond ((and (> n 0)
-	      (= (point) (zv)))
-	 (signal 'end-of-buffer))
-	((and (< n 0)
-	      (= (point) (begv)))
-	 (signal 'beginning-of-buffer)))
-  (if (> n 0)
-      (multiple-value-bind (p lines) (buffer-scan-newline (current-buffer) 
-                                                          (point (current-buffer))
-                                                          (1- (buffer-size (current-buffer)))
-                                                          n)
-        ;; Increment p by one so the point is at the beginning of the
-        ;; line.
-        (when (or (char= (char-after p) #\Newline)
-                  (= p (1- (buffer-size (current-buffer)))))
-          (incf p))
-        (goto-char p)
-        (when (zerop lines)
-          (signal 'end-of-buffer))
-        (- n lines))
-      (if (and (= n 0)
-               (not (char-before)))
-          0
-          ;; A little mess to figure out how many newlines to search
-          ;; for to give the proper output.
-          (let ((lines (if (and (char-after (point))
-                                (char= (char-after (point)) #\Newline))
-                           (- n 2)
-                           (1- n))))
-            (multiple-value-bind (p flines) 
-                (buffer-scan-newline (current-buffer) 
-                                     (point) (begv)
-                                     lines)
-              (when (and (char= (char-after p) #\Newline)
-                         (= flines (- lines)))
-                (incf p))
-              (goto-char p)
-              (when (and (< n 0)
-                         (zerop flines))
-                (signal 'beginning-of-buffer))	
-              (+ n flines))))))
-
-(defcommand self-insert-command ((arg)
-				 :prefix)
-  "Insert the character you type.
-Whichever character you type to run this command is inserted."
-  (dformat +debug-v+ "currentb: ~a ~a~%" (current-buffer) *current-buffer*)
-  (if (>= arg 2)
-      (insert-move-point (current-buffer) (make-string arg :initial-element (key-char *current-event*)))
-    (when (> arg 0)
-      (insert-move-point (current-buffer) (key-char *current-event*)))))
 
 (defcommand newline ((&optional n)
 		     :prefix)
@@ -173,14 +100,6 @@ With arg N, insert N newlines."
     (if (<= col (- (buffer-end-of-line) (point)))
 	(goto-char (+ (point) col))
       (goto-char (buffer-end-of-line)))))
-
-(defcommand delete-backward-char ()
-  "Delete the previous N characters."
-  (buffer-delete (current-buffer) (point (current-buffer)) -1))
-
-(defcommand delete-char ()
-  "Delete the following N characters."
-  (buffer-delete (current-buffer) (point (current-buffer)) 1))
 
 (defun line-move-invisible-p (pos)
   "Return non-nil if the character after POS is currently invisible."
@@ -560,10 +479,6 @@ to t."
          (t (return))))
     nil))
 
-(defcommand erase-buffer ((&optional (buffer (current-buffer))))
-  "Erase the contents of the current buffer."
-  (buffer-erase buffer))
-
 (defcommand execute-extended-command ((prefix)
 				      :raw-prefix)
   "Read a user command from the minibuffer."
@@ -596,7 +511,7 @@ within a Lisp program!  Use `set-buffer' instead.  That avoids messing with
 the window-buffer correspondences."
   (unless buffer
     (setf buffer (other-buffer (current-buffer))))
-  (let ((w (frame-current-window (selected-frame))))
+  (let ((w (frame-selected-window (selected-frame))))
     (when (typep w 'minibuffer-window)
       (error "its a minibuffer"))
     (setf buffer (get-buffer-create buffer))
@@ -608,32 +523,6 @@ the window-buffer correspondences."
 (defcommand save-buffers-kill-emacs ()
   ;; TODO: save-some-buffers
   (throw 'lice-quit t))
-
-(defcommand kill-buffer ((buffer)
-			 (:buffer "Kill buffer: " (buffer-name (current-buffer)) t))
-  "Kill the buffer BUFFER.
-The argument may be a buffer or may be the name of a buffer.
-defaults to the current buffer.
-
-Value is t if the buffer is actually killed, nil if user says no.
-
-The value of `kill-buffer-hook' (which may be local to that buffer),
-if not void, is a list of functions to be called, with no arguments,
-before the buffer is actually killed.  The buffer to be killed is current
-when the hook functions are called.
-
-Any processes that have this buffer as the `process-buffer' are killed
-with SIGHUP."
-  (let* ((target (get-buffer buffer))
-         (other (other-buffer target)))
-    (if target
-        (progn
-          ;; all windows carrying the buffer need a new buffer
-          (loop for w in (frame-window-list (selected-frame))
-                do (when (eq (window-buffer w) target)
-                     (set-window-buffer w other)))
-          (setf *buffer-list* (delete target *buffer-list*)))
-      (error "No such buffer ~a" buffer))))
 
 (defun eval-echo (string)
   ;; FIXME: don't just abandon the output
@@ -693,14 +582,14 @@ In Transient Mark mode, this does not activate the mark."
 
 (defcommand scroll-up ((&optional arg)
                        :raw-prefix)
-  (let ((win (get-current-window)))
+  (let ((win (selected-window)))
     (window-scroll-up win (max 1 (or (and arg (prefix-numeric-value arg))
                                      (- (window-height win)
                                         *next-screen-context-lines*))))))
 
 (defcommand scroll-down ((&optional arg)
                          :raw-prefix)
-  (let ((win (get-current-window)))
+  (let ((win (selected-window)))
     (window-scroll-down win (max 1 (or (and arg (prefix-numeric-value arg))
                                        (- (window-height win)
                                           *next-screen-context-lines*))))))
@@ -740,20 +629,14 @@ of the accessible part of the buffer."
   (goto-char (point-min)))
 
 (defcommand split-window-vertically ()
-  (split-window (get-current-window)))
+  (split-window (selected-window)))
 
 (defcommand split-window-horizontally ()
-  (split-window (get-current-window) nil t))
-
-(defcommand other-window ()
-  (let ((w (next-window (get-current-window) t)))
-    (if w
-	(select-window w)
-      (message "No other window."))))
+  (split-window (selected-window) nil t))
 
 (defcommand switch-to-buffer-other-window ((buffer)
 					   (:buffer "Switch to buffer in other window: " (buffer-name (other-buffer (current-buffer)))))
-  (let* ((cw (get-current-window))
+  (let* ((cw (selected-window))
 	 (w (or (next-window cw)
 		(split-window cw))))
     (select-window w)
@@ -1129,6 +1012,9 @@ With argument 0, interchanges line point is in with line mark is in."
 "Major mode not specialized for anything in particular.
 Other major modes are defined by comparison with this one.")
 
+(defun fundamental-mode ()
+  (set-major-mode '*fundamental-mode*))
+
 (defun turn-on-auto-fill ()
   "Unconditionally turn on Auto Fill mode."
   ;; FIXME: implement
@@ -1360,5 +1246,452 @@ will pop twice."
   (skip-syntax-forward '(:whitespace) (line-end-position))
   ;; Move back over chars that have whitespace syntax but have the p flag.
   (backward-prefix-chars))
+
+
+;;; undo
+
+;; XXX: gnu emacs uses a weak hashtable that automatically removes
+;; references. We need some mechanism to do similar.
+(defvar undo-equiv-table (make-hash-table :test 'eq #|:weakness t|#)
+  "Table mapping redo records to the corresponding undo one.
+A redo record for undo-in-region maps to t.
+A redo record for ordinary undo maps to the following (earlier) undo.")
+
+(defvar undo-in-region nil
+  "Non-nil if `pending-undo-list' is not just a tail of `buffer-undo-list'.")
+
+(defvar undo-no-redo nil
+  "If t, `undo' doesn't go through redo entries.")
+
+(defvar pending-undo-list nil
+  "Within a run of consecutive undo commands, list remaining to be undone.
+If t, we undid all the way to the end of it.")
+
+(defcommand undo ((&optional arg)
+                  ;; XXX: what about the *?
+                  :raw-prefix)
+  "Undo some previous changes.
+Repeat this command to undo more changes.
+A numeric argument serves as a repeat count.
+
+In Transient Mark mode when the mark is active, only undo changes within
+the current region.  Similarly, when not in Transient Mark mode, just \\[universal-argument]
+as an argument limits undo to changes within the current region."
+  ;;(interactive "*P")
+  ;; Make last-command indicate for the next command that this was an undo.
+  ;; That way, another undo will undo more.
+  ;; If we get to the end of the undo history and get an error,
+  ;; another undo command will find the undo history empty
+  ;; and will get another error.  To begin undoing the undos,
+  ;; you must type some other command.
+  (let ((modified (buffer-modified-p (current-buffer)))
+	(recent-save (recent-auto-save-p))
+	message)
+    ;; If we get an error in undo-start,
+    ;; the next command should not be a "consecutive undo".
+    ;; So set `this-command' to something other than `undo'.
+    (setq *this-command* 'undo-start)
+
+    (unless (and (eq *last-command* 'undo)
+		 (or (eq pending-undo-list t)
+		     ;; If something (a timer or filter?) changed the buffer
+		     ;; since the previous command, don't continue the undo seq.
+		     (let ((list (buffer-undo-list (current-buffer))))
+		       (while (eq (car list) nil)
+			 (setq list (cdr list)))
+		       ;; If the last undo record made was made by undo
+		       ;; it shows nothing else happened in between.
+		       (gethash list undo-equiv-table))))
+      (message "guuuungh")
+      (setq undo-in-region
+	    (if transient-mark-mode *mark-active* (and arg (not (numberp arg)))))
+      (if undo-in-region
+	  (undo-start (region-beginning) (region-end))
+          (undo-start))
+      ;; get rid of initial undo boundary
+      (undo-more 1))
+    ;; If we got this far, the next command should be a consecutive undo.
+    (setq *this-command* 'undo)
+    ;; Check to see whether we're hitting a redo record, and if
+    ;; so, ask the user whether she wants to skip the redo/undo pair.
+    (let ((equiv (gethash pending-undo-list undo-equiv-table)))
+      (or (eq (selected-window) (minibuffer-window))
+	  (setq message (if undo-in-region
+			    (if equiv "Redo in region!" "Undo in region!")
+			  (if equiv "Redo!" "Undo!"))))
+      (when (and (consp equiv) undo-no-redo)
+	;; The equiv entry might point to another redo record if we have done
+	;; undo-redo-undo-redo-... so skip to the very last equiv.
+	(while (let ((next (gethash equiv undo-equiv-table)))
+		 (if next (setq equiv next))))
+	(setq pending-undo-list equiv)))
+    (undo-more
+     (if (or transient-mark-mode (numberp arg))
+	 (prefix-numeric-value arg)
+       1))
+    ;; Record the fact that the just-generated undo records come from an
+    ;; undo operation--that is, they are redo records.
+    ;; In the ordinary case (not within a region), map the redo
+    ;; record to the following undos.
+    ;; I don't know how to do that in the undo-in-region case.
+    (setf (gethash (buffer-undo-list (current-buffer)) undo-equiv-table)
+          (if undo-in-region t pending-undo-list))
+    ;; Don't specify a position in the undo record for the undo command.
+    ;; Instead, undoing this should move point to where the change is.
+    (let ((tail (buffer-undo-list (current-buffer)))
+	  (prev nil))
+        (message "its: ~s" tail)
+      (while (car tail)
+	(when (integerp (car tail))
+	  (let ((pos (car tail)))
+	    (if prev
+		(setf (cdr prev) (cdr tail))
+                (setf (buffer-undo-list (current-buffer)) (cdr tail)))
+	    (setq tail (cdr tail))
+	    (while (car tail)
+	      (if (eql pos (car tail))
+		  (if prev
+		      (setf (cdr prev) (cdr tail))
+                      (setf (buffer-undo-list (current-buffer)) (cdr tail)))
+		(setq prev tail))
+	      (setq tail (cdr tail)))
+	    (setq tail nil)))
+	(setq prev tail
+              tail (cdr tail))))
+    ;; Record what the current undo list says,
+    ;; so the next command can tell if the buffer was modified in between.
+    (and modified (not (buffer-modified-p (current-buffer)))
+	 (delete-auto-save-file-if-necessary recent-save))
+    ;; Display a message announcing success.
+    (if message
+	(message message))))
+
+(defcommand buffer-disable-undo ((&optional buffer))
+  "Make BUFFER stop keeping undo information.
+No argument or nil as argument means do this for the current buffer."
+  (with-current-buffer (if buffer (get-buffer buffer) (current-buffer))
+    (setf (buffer-undo-list (current-buffer)) t)))
+
+(defcommand undo-only ((&optional arg)
+                       ;; XXX what about *
+                       :prefix)
+  "Undo some previous changes.
+Repeat this command to undo more changes.
+A numeric argument serves as a repeat count.
+Contrary to `undo', this will not redo a previous undo."
+  ;;(interactive "*p")
+  (let ((undo-no-redo t)) (undo arg)))
+
+(defvar undo-in-progress nil
+  "Non-nil while performing an undo.
+Some change-hooks test this variable to do something different.")
+
+(defun undo-more (n)
+  "Undo back N undo-boundaries beyond what was already undone recently.
+Call `undo-start' to get ready to undo recent changes,
+then call `undo-more' one or more times to undo them."
+  (or (listp pending-undo-list)
+      (error (concat "No further undo information"
+                     (and transient-mark-mode *mark-active*
+                          " for region"))))
+  (let ((undo-in-progress t))
+    (setq pending-undo-list (primitive-undo n pending-undo-list))
+    (if (null pending-undo-list)
+	(setq pending-undo-list t))))
+
+;; Deep copy of a list
+(defun undo-copy-list (list)
+  "Make a copy of undo list LIST."
+  (labels ((helper (elt)
+             (if (typep elt 'structure-object)
+                 (copy-structure elt)
+                 elt)))
+    (mapcar #'helper list)))
+
+(defun undo-start (&optional beg end)
+  "Set `pending-undo-list' to the front of the undo list.
+The next call to `undo-more' will undo the most recently made change.
+If BEG and END are specified, then only undo elements
+that apply to text between BEG and END are used; other undo elements
+are ignored.  If BEG and END are nil, all undo elements are used."
+  (if (eq (buffer-undo-list (current-buffer)) t)
+      (error "No undo information in this buffer"))
+  (setq pending-undo-list
+	(if (and beg end (not (= beg end)))
+	    (undo-make-selective-list (min beg end) (max beg end))
+            (buffer-undo-list (current-buffer)))))
+
+(defvar undo-adjusted-markers)
+
+(defun undo-make-selective-list (start end)
+  "Return a list of undo elements for the region START to END.
+The elements come from `buffer-undo-list', but we keep only
+the elements inside this region, and discard those outside this region.
+If we find an element that crosses an edge of this region,
+we stop and ignore all further elements."
+  (let ((undo-list-copy (undo-copy-list (buffer-undo-list (current-buffer))))
+	(undo-list (list nil))
+	undo-adjusted-markers
+	some-rejected
+	undo-elt temp-undo-list delta)
+    (while undo-list-copy
+      (setq undo-elt (car undo-list-copy))
+      (let ((keep-this
+	     (cond ((typep undo-elt 'undo-entry-modified) ;;(and (consp undo-elt) (eq (car undo-elt) t))
+		    ;; This is a "was unmodified" element.
+		    ;; Keep it if we have kept everything thus far.
+		    (not some-rejected))
+		   (t
+		    (undo-elt-in-region undo-elt start end)))))
+	(if keep-this
+	    (progn
+	      (setq end (+ end (cdr (undo-delta undo-elt))))
+	      ;; Don't put two nils together in the list
+	      (if (not (and (eq (car undo-list) nil)
+			    (eq undo-elt nil)))
+		  (setq undo-list (cons undo-elt undo-list))))
+	  (if (undo-elt-crosses-region undo-elt start end)
+	      (setq undo-list-copy nil)
+              (progn
+                (setq some-rejected t)
+                (setq temp-undo-list (cdr undo-list-copy))
+                (setq delta (undo-delta undo-elt))
+
+                (when (/= (cdr delta) 0)
+                  (let ((position (car delta))
+                        (offset (cdr delta)))
+
+                    ;; Loop down the earlier events adjusting their buffer
+                    ;; positions to reflect the fact that a change to the buffer
+                    ;; isn't being undone. We only need to process those element
+                    ;; types which undo-elt-in-region will return as being in
+                    ;; the region since only those types can ever get into the
+                    ;; output
+
+                    (dolist (undo-elt temp-undo-list)
+                      (cond ((integerp undo-elt)
+                             (if (>= undo-elt position)
+                                 (setf (car temp-undo-list) (- undo-elt offset))))
+                            ;;((atom undo-elt) nil)
+                            ((typep undo-elt 'undo-entry-delete) ;(stringp (car undo-elt))
+                             ;; (TEXT . POSITION)
+                             (let ((text-pos (abs (undo-entry-delete-position undo-elt)))
+                                   (point-at-end (< (undo-entry-delete-position undo-elt) 0 )))
+                               (if (>= text-pos position)
+                                   (setf (undo-entry-delete-position undo-elt) (* (if point-at-end -1 1)
+                                                                                  (- text-pos offset))))))
+                            ((typep undo-elt 'undo-entry-insertion) ;(integerp (car undo-elt))
+                             ;; (BEGIN . END)
+                             (when (>= (undo-entry-insertion-beg undo-elt) position)
+                               (setf (undo-entry-insertion-beg undo-elt) (- (undo-entry-insertion-beg undo-elt) offset))
+                               (setf (undo-entry-insertion-end undo-elt) (- (undo-entry-insertion-end undo-elt) offset))))
+                            ((typep undo-elt 'undo-entry-property) ;(null (car undo-elt))
+                             ;; (nil PROPERTY VALUE BEG . END)
+                             (when (>= (undo-entry-property-beg undo-elt) position)
+                               (setf (undo-entry-property-beg undo-elt) (- (undo-entry-property-beg undo-elt) offset))
+                               (setf (undo-entry-property-end undo-elt) (- (undo-entry-property-end undo-elt) offset))))))))))))
+      (setq undo-list-copy (cdr undo-list-copy)))
+    (nreverse undo-list)))
+
+(defun undo-elt-in-region (undo-elt start end)
+  "Determine whether UNDO-ELT falls inside the region START ... END.
+If it crosses the edge, we return nil."
+  (cond ((integerp undo-elt)
+	 (and (>= undo-elt start)
+	      (<= undo-elt end)))
+	((eq undo-elt nil)
+	 t)
+;; 	((atom undo-elt)
+;; 	 nil)
+	((typep undo-elt 'undo-entry-delete) ; (stringp (car undo-elt))
+	 ;; (TEXT . POSITION)
+	 (and (>= (abs (undo-entry-delete-position undo-elt)) start)
+	      (< (abs (undo-entry-delete-position undo-elt)) end)))
+	((typep undo-elt 'undo-entry-marker) ;(and (consp undo-elt) (markerp (car undo-elt)))
+	 ;; This is a marker-adjustment element (MARKER . ADJUSTMENT).
+	 ;; See if MARKER is inside the region.
+	 (let ((alist-elt (assq (undo-entry-marker-marker undo-elt) undo-adjusted-markers)))
+	   (unless alist-elt
+	     (setq alist-elt (make-undo-entry-marker :marker (undo-entry-marker-marker undo-elt)
+                                                     :distance (marker-position (undo-entry-marker-marker undo-elt))))
+	     (setq undo-adjusted-markers
+		   (cons alist-elt undo-adjusted-markers)))
+	   (and (undo-entry-marker-distance alist-elt) ;(cdr alist-elt)
+		(>= (undo-entry-marker-distance alist-elt) start)
+		(<= (undo-entry-marker-distance alist-elt) end))))
+	((typep undo-elt 'undo-entry-property) ;(null (car undo-elt))
+	 ;; (nil PROPERTY VALUE BEG . END)
+         (and (>= (undo-entry-property-beg undo-elt) start)
+              (<= (undo-entry-property-end undo-elt) end)))
+	((typep undo-elt 'undo-entry-insertion) ;(integerp (car undo-elt))
+	 ;; (BEGIN . END)
+	 (and (>= (undo-entry-insertion-beg undo-elt) start)
+	      (<= (undo-entry-insertion-end undo-elt) end)))))
+
+(defun undo-elt-crosses-region (undo-elt start end)
+  "Test whether UNDO-ELT crosses one edge of that region START ... END.
+This assumes we have already decided that UNDO-ELT
+is not *inside* the region START...END."
+  (cond ;; (atom undo-elt) nil)
+	((typep undo-elt 'undo-entry-property) ;(null (car undo-elt))
+	 ;; (nil PROPERTY VALUE BEG . END)
+	 ;;(let ((tail (nthcdr 3 undo-elt)))
+         (not (or (< (undo-entry-property-beg undo-elt) end)
+                  (> (undo-entry-property-end undo-elt) start))))
+	((typep undo-elt 'undo-entry-insertion) ;(integerp (car undo-elt))
+	 ;; (BEGIN . END)
+	 (not (or (< (undo-entry-insertion-beg undo-elt) end)
+		  (> (undo-entry-insertion-end undo-elt) start))))))
+
+;; Return the first affected buffer position and the delta for an undo element
+;; delta is defined as the change in subsequent buffer positions if we *did*
+;; the undo.
+(defun undo-delta (undo-elt)
+  (cond ((typep undo-elt 'undo-entry-delete) ;(stringp (car undo-elt))
+         ;; (TEXT . POSITION)
+         (cons (abs (undo-entry-delete-position undo-elt)) (length (undo-entry-delete-text undo-elt))))
+        ((typep undo-elt 'undo-entry-insertion) ;(integerp (car undo-elt))
+         ;; (BEGIN . END)
+         (cons (undo-entry-insertion-beg undo-elt) (- (undo-entry-insertion-beg undo-elt) (undo-entry-insertion-end undo-elt))))
+        (t
+         '(0 . 0))))
+
+(defcustom undo-ask-before-discard nil
+  "If non-nil ask about discarding undo info for the current command.
+Normally, Emacs discards the undo info for the current command if
+it exceeds `undo-outer-limit'.  But if you set this option
+non-nil, it asks in the echo area whether to discard the info.
+If you answer no, there a slight risk that Emacs might crash, so
+only do it if you really want to undo the command.
+
+This option is mainly intended for debugging.  You have to be
+careful if you use it for other purposes.  Garbage collection is
+inhibited while the question is asked, meaning that Emacs might
+leak memory.  So you should make sure that you do not wait
+excessively long before answering the question."
+  :type 'boolean
+  :group 'undo
+  :version "22.1")
+
+(define-buffer-local *undo-extra-outer-limit* 'undo-outer-limit-truncate ;;nil
+  "If non-nil, an extra level of size that's ok in an undo item.
+We don't ask the user about truncating the undo list until the
+current item gets bigger than this amount.
+
+This variable only matters if `undo-ask-before-discard' is non-nil.")
+
+;;(make-variable-buffer-local 'undo-extra-outer-limit)
+
+;; When the first undo batch in an undo list is longer than
+;; undo-outer-limit, this function gets called to warn the user that
+;; the undo info for the current command was discarded.  Garbage
+;; collection is inhibited around the call, so it had better not do a
+;; lot of consing.
+;;(setq undo-outer-limit-function 'undo-outer-limit-truncate)
+(defun undo-outer-limit-truncate (size)
+  (if undo-ask-before-discard
+      (when (or (null *undo-extra-outer-limit*)
+		(> size *undo-extra-outer-limit*))
+	;; Don't ask the question again unless it gets even bigger.
+	;; This applies, in particular, if the user quits from the question.
+	;; Such a quit quits out of GC, but something else will call GC
+	;; again momentarily.  It will call this function again,
+	;; but we don't want to ask the question again.
+	(setf *undo-extra-outer-limit* (+ size 50000))
+	(if (let (*use-dialog-box* *track-mouse* *executing-kbd-macro* )
+	      (yes-or-no-p (format nil "Buffer `~a' undo info is ~d bytes long; discard it? "
+				   (buffer-name (current-buffer)) size)))
+	    (progn (setf (buffer-undo-list (current-buffer)) nil)
+		   (setf *undo-extra-outer-limit* nil)
+		   t)
+            nil))
+      (progn
+        (display-warning '(undo discard-info)
+                         (concat
+                          (format nil "Buffer `~a' undo info was ~d bytes long.~%"
+                                  (buffer-name (current-buffer)) size)
+                          "The undo info was discarded because it exceeded \
+`undo-outer-limit'.
+
+This is normal if you executed a command that made a huge change
+to the buffer.  In that case, to prevent similar problems in the
+future, set `undo-outer-limit' to a value that is large enough to
+cover the maximum size of normal changes you expect a single
+command to make, but not so large that it might exceed the
+maximum memory allotted to Emacs.
+
+If you did not execute any such command, the situation is
+probably due to a bug and you should report it.
+
+You can disable the popping up of this buffer by adding the entry
+\(undo discard-info) to the user option `warning-suppress-types'.
+")
+                         :warning)
+        (setf (buffer-undo-list (current-buffer)) nil)
+        t)))
+
+
+(defcommand kill-word ((arg)
+		       :prefix)
+  "Kill characters forward until encountering the end of a word.
+With argument, do this that many times."
+  (kill-region (point) (progn (forward-word arg) (point))))
+
+(defcommand backward-kill-word ((arg)
+				:prefix)
+  "Kill characters backward until encountering the end of a word.
+With argument, do this that many times."
+  (kill-word (- arg)))
+
+(defcommand backward-word ((n) :prefix)
+  "Move point forward ARG words (backward if ARG is negative).
+Normally returns t.
+If an edge of the buffer or a field boundary is reached, point is left there
+and the function returns nil.  Field boundaries are not noticed if
+`inhibit-field-text-motion' is non-nil."
+  (forward-word (- n)))
+
+(defcommand forward-word ((n) :prefix)
+  "Move point forward ARG words (backward if ARG is negative).
+Normally returns t.
+If an edge of the buffer or a field boundary is reached, point is left there
+and the function returns nil.  Field boundaries are not noticed if
+`inhibit-field-text-motion' is non-nil."
+  (labels ((isaword (c)
+	     (find c +word-constituents+ :test #'char=)))
+    (let ((buffer (current-buffer)))
+      (cond ((> n 0)
+	     (gap-move-to buffer (buffer-point-aref buffer))
+	     ;; do it n times
+	     (loop for i from 0 below n
+		   while (let (p1 p2)
+			   ;; search forward for a word constituent
+			   (setf p1 (position-if #'isaword (buffer-data buffer) 
+						 :start (buffer-point-aref buffer)))
+			   ;; search forward for a non word constituent
+			   (when p1
+			     (setf p2 (position-if (complement #'isaword) (buffer-data buffer) :start p1)))
+			   (if p2
+			       (goto-char (buffer-aref-to-char buffer p2))
+			     (goto-char (point-max)))
+			   p2)))
+	    ((< n 0)
+	     (setf n (- n))
+	     (gap-move-to buffer (buffer-point-aref buffer))
+	     ;; do it n times
+	     (loop for i from 0 below n
+		   for start = (buffer-gap-start buffer) then (buffer-point-aref buffer)
+		   while (let (p1 p2)
+			   ;; search backward for a word constituent
+			   (setf p1 (position-if #'isaword (buffer-data buffer) 
+						 :from-end t
+						 :end start))
+			   ;; search backward for a non word constituent
+			   (when p1
+			     (setf p2 (position-if (complement #'isaword) (buffer-data buffer) :from-end t :end p1)))
+			   (if p2
+			       (goto-char (1+ (buffer-aref-to-char buffer p2)))
+			     (goto-char (point-min)))
+			   p2)))))))
 
 (provide :lice-0.1/simple)

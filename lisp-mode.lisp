@@ -59,14 +59,38 @@ See function `beginning-of-defun'."
   (make-instance 'major-mode
                  :name "Lisp Interaction"
                  :map (let ((m (make-sparse-keymap)))
-                        (define-key m (make-key :char #\j :control t) 'eval-print-last-sexp)
+                        (define-key m (kbd "C-j") 'eval-print-last-sexp)
                         (define-key m (make-key :char #\Tab) 'lisp-indent-line)
-                        (define-key m (make-key :char #\i :control t) 'lisp-indent-line)
-                        (define-key m (make-key :char #\q :control t :meta t) 'indent-sexp)
-                        (define-key m (make-key :char #\x :control t :meta t) 'eval-defun)
+                        (define-key m (kbd "C-i") 'lisp-indent-line)
+                        (define-key m (kbd "C-M-q") 'indent-sexp)
+                        (define-key m (kbd "C-M-x") 'eval-defun)
                         m)
                  :syntax-table *lisp-mode-syntax-table*)
   "Lisp mode.")
+
+(defvar *lisp-mode*
+  (make-instance 'major-mode
+                 :name "Lisp"
+                 :map (let ((m (make-sparse-keymap)))
+                        (define-key m (make-key :char #\Tab) 'lisp-indent-line)
+                        (define-key m (kbd "C-i") 'lisp-indent-line)
+                        (define-key m (kbd "C-M-q") 'indent-sexp)
+                        (define-key m (kbd "C-M-x") 'eval-defun)
+                        m)
+                 :syntax-table *lisp-mode-syntax-table*))
+
+(defcommand lisp-mode ()
+  "Major mode for editing Lisp code for Lisps other than GNU Emacs Lisp.
+Commands:
+Delete converts tabs to spaces as it moves back.
+Blank lines separate paragraphs.  Semicolons start comments.
+\\{lisp-mode-map}
+Note that `run-lisp' may be used either to start an inferior Lisp job
+or to switch back to an existing one.
+
+Entry to this mode calls the value of `lisp-mode-hook'
+if that value is non-nil."
+  (set-major-mode '*lisp-mode*))
 
 (defun buffer-end (arg)
   "Return the \"far end\" position of the buffer, in direction ARG.
@@ -198,7 +222,7 @@ Negative arg -N means move forward across N groups of parentheses."
       (error (c) (message "Eval error: ~a" c)))))
 
 (defcommand lisp-interaction-mode ()
-  (set-major-mode *lisp-interaction-mode*))
+  (set-major-mode '*lisp-interaction-mode*))
 
 (defvar *lisp-indent-offset* nil
   "If non-nil, indent second line of expressions that many more columns.")

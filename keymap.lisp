@@ -28,6 +28,57 @@
 (defmethod print-object ((obj key) stream)
   (print-unreadable-object (obj stream :type t :identity t)
     (format stream "~s" (print-key obj))))
+				     
+(define-condition kbd-parse (lice-condition)
+  () (:documentation "Raised when a kbd string failed to parse."))
+
+(defun parse-mods (mods end)
+  "MODS is a sequence of <MOD CHAR> #\- pairs. Return a list suitable
+for passing as the last argument to (apply #'make-key ...)"
+  (unless (evenp end)
+    (signal 'kbd-parse))
+  (apply #'nconc (loop for i from 0 below end by 2
+		       if (char/= (char mods (1+ i)) #\-)
+		       do (signal 'kbd-parse)
+		       collect (case (char mods i)
+				 (#\M (list :meta t))
+				 (#\A (list :alt t))
+				 (#\C (list :control t))
+				 (#\H (list :hyper t))
+				 (#\s (list :super t))
+				 (#\S (list :shift t))
+				 (t (signal 'kbd-parse))))))
+
+(defun parse-char-name (string)
+  "Return the character whose name is STRING."
+  (or (cond 
+        ((string= string "RET") #\Newline)
+        ((string= string "TAB") #\Tab))
+      (name-char string)
+      (and (= (length string) 1)
+	   (char string 0))))
+
+(defun parse-key (string)
+  "Parse STRING and return a key structure."
+  ;; FIXME: we want to return NIL when we get a kbd-parse error
+  ;;(ignore-errors
+    (let* ((p (when (> (length string) 2)
+		(position #\- string :from-end t :end (- (length string) 1))))
+	   (mods (parse-mods string (if p (1+ p) 0)))
+	   (ch (parse-char-name (subseq string (if p (1+ p) 0)))))
+      (and ch
+	   (apply #'make-key :char ch mods))))
+  
+(defun parse-key-seq (keys)
+  "KEYS is a key sequence. Parse it and return the list of keys."
+  (mapcar 'parse-key (split-string keys)))
+
+(defun kbd (keys)
+  "Convert KEYS to the internal Emacs key representation.
+KEYS should be a string constant in the format used for
+saving keyboard macros ***(see `insert-kbd-macro')."
+  ;; XXX: define-key needs to be fixed to handle a list of keys
+  (first (parse-key-seq keys)))
 
 ;; ;; XXX: This is hacky. Convert the class into a sequence. Maybe we should
 ;; ;; use defstruct then?
@@ -62,6 +113,9 @@ buffer's local map, the minor mode keymaps, and char property keymaps.")
    (prompt :initform nil :initarg :prompt :accessor keymap-prompt)
    (themes :initform (make-hash-table) :accessor keymap-themes)))
 
+(defun keymapp (object)
+  (typep object 'keymap))
+
 (defun make-sparse-keymap (&optional prompt)
   "Construct and return a new sparse keymap.
 The optional arg STRING supplies a menu name for the keymap
@@ -87,11 +141,11 @@ in case you use it as a menu with `x-popup-menu'."
      ;; if the binding is another keymap, then lookup the rest of the key sequence
      (cond
        ((and (keymapp cmd) (not norecurse))
-        (lookup-key cmd (cdr key) accept-default theme))
+        (lookup-key-internal cmd (cdr key) accept-default theme norecurse))
        (t cmd))
      ;; check parent for binding
      (when (keymap-parent keymap)
-       (lookup-key (keymap-parent keymap) key nil theme))
+       (lookup-key-internal (keymap-parent keymap) key nil theme norecurse))
      (when accept-default
        (and map (gethash t map))))))
 
@@ -107,9 +161,6 @@ recognize the default bindings, just as `read-key-sequence' does."
   (check-type keymap keymap)
   (lookup-key-internal keymap key accept-default theme nil))
 
-(defun keymapp (object)
-  (typep object 'keymap))
-
 (depricate set-keymap-parent (setf keymap-parent))
 (defun set-keymap-parent (keymap parent)
   "Modify keymap to set its parent map to parent.
@@ -118,7 +169,7 @@ Return parent.  parent should be nil or another keymap."
 
 (defun make-keymap (&optional string)
   (declare (ignore string))
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun map-keymap (function keymap &optional (theme :lice))
   "Call FUNCTION once for each event binding in KEYMAP.
@@ -267,26 +318,26 @@ more."
 
 (defun copy-keymap (keymap)
   (declare (ignore keymap))
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun command-remapping ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun key-binding (key &optional accept-default no-remap)
   (declare (ignore key accept-default no-remap))
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun local-key-binding ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun global-key-binding ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun minor-mode-key-binding ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun define-prefix-command ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun use-global-map (keymap)
   (check-type keymap keymap)
@@ -294,12 +345,9 @@ more."
 
 (defun use-local-map (keymap)
   "Select KEYMAP as the local keymap.
-If KEYMAP is nil, that means no local keymap.
-
-LICE: a buffer's local map is really the major mode map. Except
-it might not be in the future."
+If KEYMAP is nil, that means no local keymap."
   (check-type keymap keymap)
-  (error 'unimplemented))
+  (setf (buffer-local-map (current-buffer)) keymap))
 
 (defun current-local-map ()
   "Return current buffer's local keymap, or nil if it has none.
@@ -313,32 +361,32 @@ not be in the future."
   *current-global-map*)
 
 (defun current-minor-mode-maps ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun current-active-maps ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun accessible-keymaps ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun key-description ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun describe-vector ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun single-key-description ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun text-char-description ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun where-is-internal ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun describe-buffer-bindings ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 
 (defun apropos-internal ()
-  (error 'unimplemented))
+  (error "unimplemented"))
 

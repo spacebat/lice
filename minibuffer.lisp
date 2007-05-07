@@ -1,4 +1,4 @@
-(in-package :lice)
+(in-package "LICE")
 
 (defvar *history-length* 30
   "Maximum length for history lists before truncation takes place.
@@ -10,9 +10,6 @@ property of a history variable overrides this default.")
   "Text that was in this minibuffer before any history commands.
 This is nil if there have not yet been any history commands
 in this use of the minibuffer.")
-
-(defclass minibuffer-window (window)
-  ())
 
 (defvar *minibuffer-local-map*
   (let ((m (make-sparse-keymap)))
@@ -94,17 +91,26 @@ is added with
 (defvar *minibuffer-completion-predicate* nil
   "Within call to `completing-read', this holds the PREDICATE argument.")
 
-(defun minibufferp (&optional (buffer (current-buffer)))
-  ;; FIXME: implement
-  nil)
+(defvar *minibuffer-list* nil
+  "List of buffers for use as minibuffers.
+The first element of the list is used for the outermost minibuffer
+invocation, the next element is used for a recursive minibuffer
+invocation, etc.  The list is extended at the end as deeper
+minibuffer recursions are encountered.")
 
-(defun make-minibuffer (major-mode)
+(defun minibufferp (&optional (buffer (current-buffer)))
+  "Return t if BUFFER is a minibuffer.
+No argument or nil as argument means use current buffer as BUFFER.
+BUFFER can be a buffer or a buffer name."
+  (and (find buffer *minibuffer-list*) t))
+
+(defun make-minibuffer (map)
   "Return a fresh minibuffer with major mode, MAJOR-MODE."
   ;; FIXME: Emacs prefixes it with a space so it doesn't show up in
   ;; buffer listings. How are we gonna do this?
   (let ((mb (get-buffer-create (generate-new-buffer-name " *minibuffer*"))))
-    (setf (buffer-major-mode mb) major-mode
-          (buffer-mode-line mb) nil)
+    (setf (buffer-local-map mb) map
+          (buffer-local '*mode-line-format* mb) nil)
     mb))
 
 (defun make-minibuffer-window (height cols)
@@ -117,7 +123,7 @@ is added with
 			   :bottom-line 0
 			   :point-col 0
 			   :point-line 0
-			   :buffer (make-minibuffer *minibuffer-read-mode*)
+			   :buffer (make-minibuffer *minibuffer-local-map*)
 			   :top (make-marker)
 			   :bottom (make-marker)
 			   :bpoint (make-marker)
@@ -204,7 +210,7 @@ MINIBUF must be a minibuffer."
     (when (< end (zv minibuf))
       (delete-region end (zv minibuf)))))
 
-(defun setup-minibuffer-for-read (major-mode prompt initial-contents history)
+(defun setup-minibuffer-for-read (map prompt initial-contents history)
   (save-window-excursion
     ;; Create a new minibuffer
     (let* ((frame (selected-frame))
@@ -212,8 +218,8 @@ MINIBUF must be a minibuffer."
 	   (*minibuffer-history-position* 0)
 	   (*minibuffer-text-before-history* nil)
 	   (old-minibuffer (window-buffer (frame-minibuffer-window frame)))
-	   (new-minibuffer (make-minibuffer major-mode)))
-    (window-save-point (get-current-window))
+	   (new-minibuffer (make-minibuffer map)))
+    (window-save-point (selected-window))
     ;; attach it to the current frame
     (set-window-buffer (frame-minibuffer-window frame) new-minibuffer)
     (select-window (frame-minibuffer-window frame))
@@ -318,7 +324,7 @@ one puts point at the beginning of the string.  *Note* that this
 behavior differs from the way such arguments are used in `completing-read'
 and some related functions, which use zero-indexing for POSITION."
   (declare (ignore default-value read keymap))
-  (setup-minibuffer-for-read *minibuffer-read-mode* prompt initial-contents history))
+  (setup-minibuffer-for-read (or keymap *minibuffer-local-map*) prompt initial-contents history))
 
 (defun tree-find (tree obj &key (test #'eq))
   "find OBJ in TREE. Return the OBJ or nil."
@@ -466,7 +472,7 @@ and some related functions, which use zero-indexing for POSITION."
           (insert (subseq match (length txt))))))))
 
 (defun completing-read (prompt table &key predicate require-match
-			       initial-input (history '*minibuffer-history*) def)
+                        initial-input (history '*minibuffer-history*) def)
   "Read a string in the minibuffer, with completion.
 PROMPT is a string to prompt with; normally it ends in a colon and a space.
 TABLE is an alist whose elements' cars are strings, or an obarray.
@@ -498,8 +504,8 @@ DEF, if non-nil, is the default value."
   (let ((*minibuffer-completion-table* table)
 	(*minibuffer-completion-predicate* predicate))
     (setup-minibuffer-for-read (if require-match
-                                   *minibuffer-must-match-mode*
-                                   *minibuffer-complete-mode*)
+                                   *minibuffer-local-must-match-map*
+                                   *minibuffer-local-completion-map*)
                                prompt initial-input history)))
 
 ;; (defun y-or-n-p (prompt)
