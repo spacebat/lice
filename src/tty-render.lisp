@@ -48,7 +48,7 @@ hardware.")
 (defun clear-to-eol (y start window frame)
   (declare (type window window)
 	   (type fixnum y start))
-  (clear-line-between window y start (1- (window-width window)) frame)
+  (clear-line-between window y start (1- (window-width window nil)) frame)
   ;; draw the seperator
   (when (window-seperator window)
     (putch #\| (+ (window-x window) (1- (window-width window t))) y window frame)))
@@ -97,12 +97,12 @@ the text properties present."
     ;; Special case: when the buffer is empty
     (if (= (buffer-size (window-buffer w)) 0)
 	(progn 
-	  (dotimes (y (window-height w))
+	  (dotimes (y (window-height w nil))
 	    (clear-to-eol y 0 w frame))
 	  (setf cursor-x 0
 		cursor-y 0))
       (let ((end (loop named row
-		       for y below (window-height w)
+		       for y below (window-height w nil)
 		       for line from (window-top-line w) below cache-size
 		       ;; return the last line, so we can erase the rest
 		       finally (return-from row y)
@@ -115,7 +115,7 @@ the text properties present."
 			    ;; setup the display properties.
 			    (turn-on-attributes (window-buffer w) bp)
 			    (loop named col
-				for x below (window-width w) do
+				for x below (window-width w nil) do
 				(progn
 				  ;; Skip the gap
 				  (when (= p (buffer-gap-start buf))
@@ -144,8 +144,8 @@ the text properties present."
 				    (incf p)
 				    (incf bp))))))))
 	;; Check if the bottom of the window needs to be erased.
-	(when (< end (1- (window-height w)))
-	  (loop for i from end below (window-height w) do
+	(when (< end (1- (window-height w nil)))
+	  (loop for i from end below (window-height w nil) do
 		(clear-to-eol i 0 w frame)))))
     ;; rxvt draws black on black if i don't turn on a color
     (cl-ncurses::attroff (cl-ncurses::COLOR-PAIR 1))
@@ -155,13 +155,13 @@ the text properties present."
       (update-mode-line (window-buffer w))
       ;;(cl-ncurses::attron cl-ncurses::A_REVERSE)
       (cl-ncurses::attron (cl-ncurses::COLOR-PAIR 2))
-      (putstr (truncate-mode-line (window-buffer w) (window-width w))
+      (putstr (truncate-mode-line (window-buffer w) (window-width w nil))
 	      0 (window-height w nil) w frame)
       (cl-ncurses::attroff (cl-ncurses::COLOR-PAIR 2))
       ;;(cl-ncurses::attroff cl-ncurses::A_REVERSE)
       ;; don't forget the seperator on the modeline line
       (when (window-seperator w)
-	(putch #\| (+ (window-x w) (window-width w)) (window-height w) w frame)))
+	(putch #\| (+ (window-x w) (window-width w nil)) (window-height w nil) w frame)))
     (reset-line-state w)
     ;; Set the cursor at the right spot
     (values cursor-x cursor-y)))

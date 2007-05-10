@@ -376,15 +376,21 @@ and insert the result."
   (dolist (o objects)
     (insert-move-point (current-buffer) o)))
 
-(defun insert-buffer-substring (buffer start end)
+(defun insert-buffer-substring (buffer &optional (start (point-min)) (end (point-max)))
   "Insert before point a substring of the contents of buffer.
 buffer may be a buffer or a buffer name.
 Arguments start and end are character positions specifying the substring.
 They default to the values of (point-min) and (point-max) in buffer."
-  (let* ((buf (get-buffer buffer))
-	 (s (buffer-substring start end)))
-    (with-current-buffer buf
-      (insert s))))
+  (check-number-coerce-marker start)
+  (check-number-coerce-marker end)  
+  (if (< end start)
+      (psetf start end
+             end start))
+  (let* ((buf (get-buffer buffer)))
+    (when (or (< start (buffer-min buf))
+              (> end (buffer-max buf)))
+      (signal 'args-out-of-range))
+    (insert (make-buffer-string start end t buf))))
 
 (defun preceding-char ()
   "Return the character preceding point.
@@ -589,8 +595,35 @@ A multibyte character is handled correctly."
 (defun compare-buffer-substrings ()
   (error "Unimplemented"))
 
-(defun subst-char-in-region ()
-  (error "Unimplemented"))
+(defun subst-char-in-region (start end fromchar tochar &optional noundo)
+  "From START to END, replace FROMCHAR with TOCHAR each time it occurs.
+If optional arg NOUNDO is non-nil, don't record this change for undo
+and don't mark the buffer as really changed.
+Both characters must have the same length of multi-byte form."
+  (declare (ignore noundo))
+  (check-number-coerce-marker start)
+  (check-number-coerce-marker end)
+  (check-type fromchar character)
+  (check-type tochar character)
+  (multiple-value-setq (start end) (validate-region start end))
+
+  ;; FIXME: handle noundo
+  (let* ((buf (current-buffer))
+         (start-aref (buffer-char-to-aref buf start))
+         (end-aref (buffer-char-to-aref buf end)))
+    (if (or (< (gap-end buf)
+               start-aref)
+            (> (buffer-gap-start buf)
+               end-aref))
+        (nsubstitute tochar fromchar (buffer-data buf)
+                     :start start-aref
+                     :end end-aref)
+        (progn
+          (gap-move-to buf start-aref)
+          (nsubstitute tochar fromchar (buffer-data buf)
+                       :start (buffer-char-to-aref buf start)
+                       :end (buffer-char-to-aref buf end))))
+    nil))
 
 (defun translate-region-internal ()
   (error "Unimplemented"))
@@ -604,8 +637,39 @@ A multibyte character is handled correctly."
 (defun save-restriction ()
   (error "Unimplemented"))
 
-(defun transpose-regions ()
-  (error "Unimplemented"))
+(defun transpose-regions (startr1 endr1 startr2 endr2 &optional leave_markers)
+  "Transpose region STARTR1 to ENDR1 with STARTR2 to ENDR2.
+The regions may not be overlapping, because the size of the buffer is
+never changed in a transposition.
+
+Optional fifth arg LEAVE-MARKERS, if non-nil, means don't update
+any markers that happen to be located in the regions.
+
+Transposing beyond buffer boundaries is an error."
+  (check-number-coerce-marker startr1)
+  (check-number-coerce-marker endr1)
+  (check-number-coerce-marker startr2)
+  (check-number-coerce-marker endr2)
+  (multiple-value-setq (startr1 endr1) (validate-region startr1 endr1))
+  (multiple-value-setq (startr2 endr2) (validate-region startr2 endr2))
+  (when (< startr2 startr1)
+    (psetf startr1 startr2
+           endr1 endr2
+           startr2 startr1
+           endr2 endr1))
+  ;; no overlapping
+  (assert (<= endr1 startr2))
+  ;; FIXME: The emacs version looks optimized for a bunch of
+  ;; cases. But we're gonna cheap out
+  (let ((r1 (buffer-substring startr1 endr1))
+        (r2 (buffer-substring startr2 endr2)))
+    ;; do the 2nd one first so the positions remain valid.
+    (delete-region startr2 endr2)
+    (set-point startr2)
+    (insert r1)
+    (delete-region startr1 endr1)
+    (set-point startr1)
+    (insert r2)))
 
 (defun goto-char (position &aux (buffer (current-buffer)))
   "Set point to POSITION, a number."
@@ -627,5 +691,15 @@ A multibyte character is handled correctly."
 ***If POS is out of range, the value is nil."
   (check-number-coerce-marker pos)
   (buffer-char-after (current-buffer) (1- pos)))
+
+(defun substring-no-properties (string &optional (from 0) (to (length string)))
+  "Return a substring of string, without text properties.
+It starts at index from and ending before to.
+to may be nil or omitted; then the substring runs to the end of string.
+If from is nil or omitted, the substring starts at the beginning of string.
+If from or to is negative, it counts from the end.
+
+With one argument, just copy string without its properties."
+  (subseq string from to))
 
 (provide :lice-0.1/editfns)

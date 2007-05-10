@@ -576,9 +576,16 @@ means that other_buffer is more likely to choose a relevant buffer."
   (setf *buffer-list* (delete buffer *buffer-list* :test #'eq))
   (push buffer *buffer-list*))
 
+(defun buffer-read-only ()
+"Non-nil if this buffer is read-only."
+  (slot-value (current-buffer) 'read-only))
+
+(defun (setf buffer-read-only) (value)
+  (setf (slot-value (current-buffer) 'read-only) (and value t)))
+
 (defun barf-if-buffer-read-only ()
   "Signal a `buffer-read-only' error if the current buffer is read-only."
-  (when (buffer-read-only (current-buffer))
+  (when (buffer-read-only)
     (signal 'buffer-read-only)))
 
 (defun bufferp (object)
@@ -656,6 +663,17 @@ its value may not be a list of functions.")
   "*Column for the default indent-line-function to indent to.
 Linefeed indents to this column in Fundamental mode.")
 (make-variable-buffer-local 'left-margin)
+
+(define-buffer-local truncate-lines nil
+  "*Non-nil means do not display continuation lines.
+Instead, give each line of text just one screen line.
+
+Note that this is overridden by the variable
+`truncate-partial-width-windows' if that variable is non-nil
+and this buffer is not full-frame width.")
+(make-variable-buffer-local 'truncate-lines)
+
+
 
 (defun make-buffer-string (start end props &optional (buffer (current-buffer)))
   "Making strings from buffer contents.

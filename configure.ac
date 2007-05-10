@@ -45,4 +45,4 @@ AC_MSG_NOTICE([Using $LISP at $LISP_PROGRAM])
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.
-AC_OUTPUT(Makefile)
+AC_OUTPUT(Makefile src/Makefile)

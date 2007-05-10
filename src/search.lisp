@@ -43,6 +43,31 @@ Zero means the entire text matched by the whole regexp or whole string."
       (match-data-start data)
       (aref (match-data-reg-starts data) (1- idx))))
 
+(defun match-string (num &optional string)
+  "Return string of text matched by last search.
+NUM specifies which parenthesized expression in the last regexp.
+ Value is nil if NUMth pair didn't match, or there were less than NUM pairs.
+Zero means the entire text matched by the whole regexp or whole string.
+STRING should be given if the last search was by `string-match' on STRING."
+  (if (match-beginning num)
+      (if string
+	  (substring string (match-beginning num) (match-end num))
+          (buffer-substring (match-beginning num) (match-end num)))))
+
+
+(defun match-string-no-properties (num &optional string)
+  "Return string of text matched by last search, without text properties.
+NUM specifies which parenthesized expression in the last regexp.
+ Value is nil if NUMth pair didn't match, or there were less than NUM pairs.
+Zero means the entire text matched by the whole regexp or whole string.
+STRING should be given if the last search was by `string-match' on STRING."
+  (if (match-beginning num)
+      (if string
+	  (substring-no-properties string (match-beginning num)
+				   (match-end num))
+          (buffer-substring-no-properties (match-beginning num)
+                                          (match-end num)))))
+
 ;; FIXME: needs a formatter and the search string
 (define-condition search-failed (lice-condition)
   () (:documentation "raised when a search failed to match"))
@@ -288,6 +313,15 @@ matched by the parenthesis constructions in regexp."
       collect #\\
       collect c)
    'string))
+
+(defun wordify (string)
+  "Given a string of words separated by word delimiters,
+compute a regexp that matches those exact words
+separated by arbitrary punctuation."
+  (error "unimplemented"))
+
+(defun word-search-forward (string &key (bound (begv)) (error t) count &aux (buffer (current-buffer)))
+  (error "unimplemented"))
 
 (defun scan-buffer (buffer target start end count)
 "Search for COUNT instances of the character TARGET between START and END.

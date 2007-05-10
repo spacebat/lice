@@ -488,10 +488,10 @@ to t."
                                 (t (format nil "~a M-x " prefix)))))
          (cmd (lookup-command name)))
     (if cmd
-	(progn
+	(let ((*prefix-arg* prefix))
 	  (dispatch-command name)
           (setf *this-command* (command-name cmd)))
-      (message "No Match"))))
+        (message "No Match"))))
 
 (defcommand switch-to-buffer ((buffer &optional norecord)
 			      (:buffer "Switch To Buffer: " (buffer-name (other-buffer (current-buffer)))))
@@ -584,14 +584,14 @@ In Transient Mark mode, this does not activate the mark."
                        :raw-prefix)
   (let ((win (selected-window)))
     (window-scroll-up win (max 1 (or (and arg (prefix-numeric-value arg))
-                                     (- (window-height win)
+                                     (- (window-height win nil)
                                         *next-screen-context-lines*))))))
 
 (defcommand scroll-down ((&optional arg)
                          :raw-prefix)
   (let ((win (selected-window)))
     (window-scroll-down win (max 1 (or (and arg (prefix-numeric-value arg))
-                                       (- (window-height win)
+                                       (- (window-height win nil)
                                           *next-screen-context-lines*))))))
 
 (defcommand end-of-buffer ()
@@ -998,6 +998,7 @@ With argument 0, interchanges line point is in with line mark is in."
      (goto-char (car pos1))
      (insert word2)))
 
+
 ;;; 
 
 (defcustom-buffer-local *fill-prefix* nil
@@ -1019,6 +1020,104 @@ Other major modes are defined by comparison with this one.")
   "Unconditionally turn on Auto Fill mode."
   ;; FIXME: implement
   )
+
+(define-buffer-local comment-line-break-function 'comment-indent-new-line
+  "*Mode-specific function which line breaks and continues a comment.
+
+This function is only called during auto-filling of a comment section.
+The function should take a single optional argument, which is a flag
+indicating whether it should use soft newlines.")
+
+(defun do-auto-fill ()
+  "This function is used as the auto-fill-function of a buffer
+when Auto-Fill mode is enabled.
+It returns t if it really did any work.
+\(Actually some major modes use a different auto-fill function,
+but this one is the default one.)"
+  (let (fc justify give-up
+	   (*fill-prefix* *fill-prefix*))
+    (el:if (or (not (setq justify (current-justification)))
+	    (null (setq fc (current-fill-column)))
+	    (and (eq justify 'left)
+		 (<= (current-column) fc))
+	    (and auto-fill-inhibit-regexp
+		 (save-excursion (beginning-of-line)
+				 (looking-at auto-fill-inhibit-regexp))))
+	nil ;; Auto-filling not required
+      (el:if (memq justify '(full center right))
+	  (save-excursion (unjustify-current-line)))
+
+      ;; Choose a *fill-prefix* automatically.
+      (when (and adaptive-fill-mode
+		 (or (null *fill-prefix*) (string= *fill-prefix* "")))
+	(let ((prefix
+	       (fill-context-prefix
+		(save-excursion (backward-paragraph 1) (point))
+		(save-excursion (forward-paragraph 1) (point)))))
+	  (and prefix (not (equal prefix ""))
+	       ;; Use auto-indentation rather than a guessed empty prefix.
+	       (not (and fill-indent-according-to-mode
+			 (string-match "\\`[ \t]*\\'" prefix)))
+	       (setq *fill-prefix* prefix))))
+
+      (while (and (not give-up) (> (current-column) fc))
+	;; Determine where to split the line.
+	(let* (after-prefix
+	       (fill-point
+		(save-excursion
+		  (beginning-of-line)
+		  (setq after-prefix (point))
+		  (and *fill-prefix*
+		       (looking-at (regexp-quote *fill-prefix*))
+		       (setq after-prefix (match-end 0)))
+		  (move-to-column (1+ fc))
+		  (fill-move-to-break-point after-prefix)
+		  (point))))
+
+	  ;; See whether the place we found is any good.
+	  (el:if (save-excursion
+		(goto-char fill-point)
+		(or (bolp)
+		    ;; There is no use breaking at end of line.
+		    (save-excursion (skip-chars-forward " ") (eolp))
+		    ;; It is futile to split at the end of the prefix
+		    ;; since we would just insert the prefix again.
+		    (and after-prefix (<= (point) after-prefix))
+		    ;; Don't split right after a comment starter
+		    ;; since we would just make another comment starter.
+		    (and comment-start-skip
+			 (let ((limit (point)))
+			   (beginning-of-line)
+			   (and (re-search-forward comment-start-skip
+						   limit t)
+				(eq (point) limit))))))
+	      ;; No good place to break => stop trying.
+	      (setq give-up t)
+	    ;; Ok, we have a useful place to break the line.  Do it.
+	    (let ((prev-column (current-column)))
+	      ;; If point is at the fill-point, do not `save-excursion'.
+	      ;; Otherwise, if a comment prefix or *fill-prefix* is inserted,
+	      ;; point will end up before it rather than after it.
+	      (el:if (save-excursion
+		    (skip-chars-backward " \t")
+		    (= (point) fill-point))
+		  (funcall comment-line-break-function t)
+		(save-excursion
+		  (goto-char fill-point)
+		  (funcall comment-line-break-function t)))
+	      ;; Now do justification, if required
+	      (el:if (not (eq justify 'left))
+		  (save-excursion
+		    (end-of-line 0)
+		    (justify-current-line justify nil t)))
+	      ;; If making the new line didn't reduce the hpos of
+	      ;; the end of the line, then give up now;
+	      ;; trying again will not help.
+	      (el:if (>= (current-column) prev-column)
+		  (setq give-up t))))))
+      ;; Justify last line.
+      (justify-current-line justify t t)
+      t)))
 
 
 ;; FIXME: put this info in the following condition
@@ -1693,5 +1792,20 @@ and the function returns nil.  Field boundaries are not noticed if
 			       (goto-char (1+ (buffer-aref-to-char buffer p2)))
 			     (goto-char (point-min)))
 			   p2)))))))
+
+(defvar line-number-mode nil
+  )
+
+(defvar column-number-mode nil
+  )
+
+(defun line-number-mode (&optional arg)
+  ""
+  (warn "Unimplemented"))
+
+(defun column-number-mode (&optional arg)
+  ""
+  (warn "Unimplemented"))
+
 
 (provide :lice-0.1/simple)

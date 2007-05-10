@@ -12,32 +12,31 @@ This also inhibits the use of the `intangible' text property.")
 ;;   if (EQ (*begin, *end) && begin != end)
 ;;     return NULL_INTERVAL;
     (when (> begin end)
-    ;; MOVITZ doesn't have psetf
-    (let ((tmp begin))
-      (setf begin end
-	    end tmp))
-;;       (psetf begin end
-;; 	     end begin)
-      )
-    (if (typep object 'buffer)
-	(progn
-	  (when (not (and (<= (buffer-min object) begin)
-			  (<= begin end)
-			  (<= end (buffer-max object))))
-	    (signal 'args-out-of-range))
-	  (setf i (intervals object))
-	  (when (= (buffer-min object) (buffer-max object))
-	    (return-from validate-interval-range (values nil begin end)))
-	  (setf searchpos begin))
-      (let ((len (length (pstring-data object))))
-	(when (not (and (<= 0 begin)
-			(<= begin end)
-			(<= end len)))
-	  (signal 'args-out-of-range))
-	(setf i (intervals object))
-	(when (zerop len)
-	  (return-from validate-interval-range (values nil begin end)))
-	(setf searchpos begin)))
+      (psetf begin end
+	     end begin))
+    (etypecase object
+        (buffer
+         (when (not (and (<= (buffer-min object) begin)
+                         (<= begin end)
+                         (<= end (buffer-max object))))
+           (signal 'args-out-of-range))
+         (setf i (intervals object))
+         (when (= (buffer-min object) (buffer-max object))
+           (return-from validate-interval-range (values nil begin end)))
+         (setf searchpos begin))
+      (pstring
+       (let ((len (length (pstring-data object))))
+         (when (not (and (<= 0 begin)
+                         (<= begin end)
+                         (<= end len)))
+           (signal 'args-out-of-range))
+         (setf i (intervals object))
+         (when (zerop len)
+           (return-from validate-interval-range (values nil begin end)))
+         (setf searchpos begin)))
+      (string
+       (return-from validate-interval-range
+         (values nil (max 0 begin) (min (length object) end)))))
     (if i
 	(values (find-interval i searchpos) begin end)
       (if force
@@ -516,5 +515,16 @@ BUFFER can be either a buffer or nil (meaning current buffer)."
 	'after)
        (t 
 	'before)))))
+
+(defun remove-list-of-text-properties (start end list-of-properties &optional object)
+  "Remove some properties from text from START to END.
+The third argument LIST-OF-PROPERTIES is a list of property names to remove.
+If the optional fourth argument OBJECT is a buffer (or nil, which means
+the current buffer), START and END are buffer positions (integers or
+markers).  If OBJECT is a string, START and END are 0-based indices into it.
+Return t if any property was actually removed, nil otherwise."
+  (declare (ignore start and list-of-properties object))
+  (error "unimplemented"))
+
 	   
 (provide :lice-0.1/textprop)

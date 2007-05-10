@@ -87,7 +87,7 @@ TYPE isn't used yet. it's just there for hype."
 
 ;;; Other non-display related functions
 
-(defun window-height (w &optional include-mode-line)
+(defun window-height (&optional (w (selected-window)) (include-mode-line t))
   "Return the height of the window. By default, the mode-line is not
 included in the height."
   ;; if the mode-line is nil, then there is no modeline.
@@ -96,7 +96,7 @@ included in the height."
       (slot-value w 'h)
     (1- (slot-value w 'h))))
 
-(defun window-width (w &optional include-seperator)
+(defun window-width (&optional (w (selected-window)) (include-seperator t))
   "Return the width of the window. By default, the vertical seperator,
 for horizontal splits, is not included in the width."
   ;; if the mode-line is nil, then there is no modeline.
@@ -379,9 +379,9 @@ starting line."
   "Fill in window's line cache from WINDOW-TOP with a full window's
 worth of lines and return T if POINT was in the line cache. otherwise
 don't change anything and return nil."
-  (let* ((lines (generate-n-lines-forward (window-buffer window) (window-width window)
+  (let* ((lines (generate-n-lines-forward (window-buffer window) (window-width window nil)
 					  (marker-position (window-top window))
-					  (window-height window))))
+					  (window-height window nil))))
     (add-end-of-buffer (window-buffer window) lines)
     (when (or always-return-lines
 	      (point-in-line-cache lines point))
@@ -391,9 +391,9 @@ don't change anything and return nil."
   "Fill in window's line cache from WINDOW-BOTTOM with a full window's
 worth of lines and return T if POINT was in the line cache. otherwise
 don't change anything and return nil."
-  (let* ((lines (generate-n-lines-backward (window-buffer window) (window-width window)
+  (let* ((lines (generate-n-lines-backward (window-buffer window) (window-width window nil)
 					   (marker-position (window-bottom window))
-					   (window-height window))))
+					   (window-height window nil))))
     (add-end-of-buffer (window-buffer window) lines)
     (when (or always-return-lines
 	      (point-in-line-cache lines point))
@@ -406,12 +406,12 @@ above WINDOW-POINT, or as many as possible if we hit the top of the window."
   (let* ((max (1- (buffer-size (window-buffer window))))
 	 (b (buffer-scan-newline (window-buffer window) point 0 0))
 	 (e (buffer-scan-newline (window-buffer window) point max 1))
-	 (lines-above (generate-n-lines-backward (window-buffer window) (window-width window)
+	 (lines-above (generate-n-lines-backward (window-buffer window) (window-width window nil)
 						 e n-many))
 	 (lines-below (when (< e max)
-			(generate-n-lines-forward (window-buffer window) (window-width window)
+			(generate-n-lines-forward (window-buffer window) (window-width window nil)
 						  (1+ e)
-						  (- (window-height window)
+						  (- (window-height window nil)
 						     (min n-many 
 							  (length lines-above)))))))
     (declare (ignore b))
@@ -441,21 +441,21 @@ above WINDOW-POINT, or as many as possible if we hit the top of the window."
     ;; set the top marker
     (setf (window-bottom-valid window) nil)
     (cond (bot
-	   (let* ((tl (max 0 (- (length lines) (window-height window))))
-		  (bl (min (1- (length lines)) (+ tl (1- (window-height window))))))
+	   (let* ((tl (max 0 (- (length lines) (window-height window nil))))
+		  (bl (min (1- (length lines)) (+ tl (1- (window-height window nil))))))
 	     (setf (marker-position (window-top window)) 
 		   (cache-item-start (elt lines tl))
 		   (window-top-line window) tl
 		   (marker-position (window-bottom window)) (cache-item-end (elt lines bl)))))
 	  (top
 	   (let* ((tl (point-in-line-cache lines (marker-position (window-top window))))
-		  (bl (min (1- (length lines)) (+ tl (1- (window-height window))))))
+		  (bl (min (1- (length lines)) (+ tl (1- (window-height window nil))))))
 	     (setf (window-top-line window) tl
 		   (marker-position (window-bottom window)) (cache-item-end (elt lines bl)))))
 	  (around
 	   (let* ((pl (point-in-line-cache lines point))
 		  (tl (max 0 (- pl n-many)))
-		  (bl (min (1- (length lines)) (+ tl (1- (window-height window))))))
+		  (bl (min (1- (length lines)) (+ tl (1- (window-height window nil))))))
 	     (setf (marker-position (window-top window))
 		   (cache-item-start (elt lines tl))
 		   (window-top-line window) tl
@@ -586,8 +586,8 @@ If FRAME is a frame, search only that frame."
 (defun window-scroll-up (window n-lines)
   "scroll the window up (go torwards the end of the buffer) LINES many
 lines, moving the window point to be visible."
-  (let* ((len (+ (window-height window) n-lines))
-	 (lines (generate-n-lines-forward (window-buffer window) (window-width window)
+  (let* ((len (+ (window-height window nil) n-lines))
+	 (lines (generate-n-lines-forward (window-buffer window) (window-width window nil)
 					 (marker-position (window-top window)) 
 					 len)))
     ;; if there aren't n-lines left in the buffer then signal
@@ -606,13 +606,13 @@ lines, moving the window point to be visible."
 (defun window-scroll-down (window n-lines)
   "scroll the window down (go torwards the beginning of the buffer)
 LINES many lines, moving the window point to be visible."
-  (let* ((len (+ (window-height window) n-lines))
+  (let* ((len (+ (window-height window nil) n-lines))
 	 ;; FIXME: this is basically, gross.
-	 (above (generate-n-lines-backward (window-buffer window) (window-width window)
+	 (above (generate-n-lines-backward (window-buffer window) (window-width window nil)
 					   (max (buffer-min (window-buffer window))
 						(1- (marker-position (window-top window))))
 					   n-lines))
-	 (lines (generate-n-lines-forward (window-buffer window) (window-width window)
+	 (lines (generate-n-lines-forward (window-buffer window) (window-width window nil)
 					  (cache-item-start 
 					   (elt above (max 0 (- (length above) n-lines))))
 					  len)))
@@ -624,7 +624,7 @@ LINES many lines, moving the window point to be visible."
     ;; FIXME: for now, set the point at the bottom of the window if it
     ;; isn't visible.
     (let ((eow (elt lines (1- (min (length lines)
-				   (window-height window))))))
+				   (window-height window nil))))))
       (when (or (> (window-point window) (cache-item-end eow))
 		(not (point-in-line-cache lines (window-point window))))
 	(set-window-point window (cache-item-start eow))))))
@@ -962,5 +962,18 @@ of `display-buffer' for additional customization information.
 			 ;; FIXME: (set-buffer-major-mode buffer)
 		 (other-buffer (current-buffer))))
   (select-window (display-buffer buffer other-window)))
+
+(defun set-window-start (window pos &optional noforce)
+  "Make display in WINDOW start at position POS in WINDOW's buffer.
+Return POS.
+Optional third arg NOFORCE non-nil inhibits next redisplay
+from overriding motion of point in order to display at this exact start."
+  )
+
+(defun window-start (&optional (window (selected-window)))
+  "Return position at which display currently starts in WINDOW.
+WINDOW defaults to the selected window.
+This is updated by redisplay or by calling `set-window-start'."
+  (marker-position (window-top window)))
 
 (provide :lice-0.1/window)

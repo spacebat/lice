@@ -43,27 +43,36 @@ The value is a list of KEYs."
 	 (*this-command* (command-name cmd))
 	 (*current-prefix-arg* *prefix-arg*))
     (clear-minibuffer)
-    (handler-case (funcall (command-fn cmd))
-      (quit (c)
-        (declare (ignore c))
-	;; FIXME: debug-on-quit
+    (restart-case
+        (handler-bind
+            ((quit
+              (lambda (c)
+                (if *debug-on-quit*
+                    (signal c)
+                    (invoke-restart 'abort-command))))
+             (lice-condition
+              (lambda (c)
+                (if *debug-on-error*
+                    (signal c)
+                    (invoke-restart 'just-print-error c))))
+             (error 
+              (lambda (c)
+                (if *debug-on-error*
+                    (signal c)
+                    (invoke-restart 'just-print-error c)))))
+          (funcall (command-fn cmd)))
+      (abort-command ()
+        :report "Abort the command."
         (message "Quit"))
-      (lice-condition (c)
-        (message "~a" c))
-      ;;       (error (c)
-      ;; 	;; FIXME: lice has no debugger yet, so use the lisp's
-      ;; 	;; debugger.
-      ;; 	(if *debug-on-error*
-      ;; 	    (error c)
-      ;; 	  (message "~a" c)))
-      )
+      (just-print-error (c)
+        :report "Abort and print error."
+        ;; we need a bell
+        (message "~a" c)))
     (setf *last-command* *this-command*
 	  ;; reset command keys, since the command is over.
 	  *this-command-keys* nil)
     ;; handle undo
-    (undo-boundary)
-
-))
+    (undo-boundary)))
 
 ;;; events
 
@@ -126,9 +135,10 @@ events that invoked the current command."
 (defconstant +key-tab+ 0407)
 (defconstant +key-escape+ 27)
 
-(defun wait-for-event ()
+(defun wait-for-event (&optional time)
   ;; don't let the user C-g when reading for input
-  (let ((*waiting-for-input* t))
+  (let ((*waiting-for-input* t)
+        (now (get-internal-real-time)))
     (loop
        for event = (frame-read-event (selected-frame))
        for procs = (poll-processes) do
@@ -152,7 +162,11 @@ events that invoked the current command."
               ;; but i don't know how to do that. So just sleep for a tiny
               ;; bit to pass control over to the operating system and then
               ;; check again.
-              (sleep 0.01))))))
+              (sleep 0.01)))
+       ;; let the loop run once
+       until (and time (>= (/ (- (get-internal-real-time) now)
+                              internal-time-units-per-second)
+                           time)))))
 
 
 (defun top-level-next-event ()

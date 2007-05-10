@@ -30,7 +30,7 @@
 			    ;; Figure out what part to display
 			    (window-framer tree 
 					   (window-point tree)
-					   (truncate (window-height tree) 2))
+					   (truncate (window-height tree nil) 2))
 			    (dformat +debug-vvv+ "after framer: ~a~%"
 				     (lc-cache (window-cache tree)))
 			    ;; display it

@@ -187,8 +187,53 @@ Optional arg nodisp non-nil means don't redisplay, just wait for input.
 Redisplay is preempted as always if input arrives, and does not happen
 if input is available before it starts.
 Value is t if waited the full time with no input arriving."
-  (declare (ignore seconds nodisp))
-  ;; FIXME: actually sleep
-  (frame-render (selected-frame)))
+  (unless nodisp
+    (frame-render (selected-frame)))
+  ;; FIXME: poll for input
+  (sleep seconds)
+  t
+;;   (let ((event (wait-for-event seconds)))
+;;     (if event
+;;         (progn
+;;           (push event *unread-command-events*)
+;;           nil)
+;;         t))
+  )
+
+
+;;; Matching and match data
+(defun match-string (num &optional string)
+  "Return string of text matched by last search.
+NUM specifies which parenthesized expression in the last regexp.
+ Value is nil if NUMth pair didn't match, or there were less than NUM pairs.
+Zero means the entire text matched by the whole regexp or whole string.
+STRING should be given if the last search was by `string-match' on STRING."
+  (if (match-beginning num)
+      (if string
+	  (substring string (match-beginning num) (match-end num))
+	(buffer-substring (match-beginning num) (match-end num)))))
+
+(defun match-string-no-properties (num &optional string)
+  "Return string of text matched by last search, without text properties.
+NUM specifies which parenthesized expression in the last regexp.
+ Value is nil if NUMth pair didn't match, or there were less than NUM pairs.
+Zero means the entire text matched by the whole regexp or whole string.
+STRING should be given if the last search was by `string-match' on STRING."
+  (if (match-beginning num)
+      (if string
+	  (substring-no-properties string (match-beginning num)
+				   (match-end num))
+	(buffer-substring-no-properties (match-beginning num)
+					(match-end num)))))
+
+
+(defun force-mode-line-update (&optional all)
+  "Force redisplay of the current buffer's mode line and header line.
+With optional non-nil ALL, force redisplay of all mode lines and
+header lines.  This function also forces recomputation of the
+menu bar menus and the frame title."
+;;   (if all (save-excursion (set-buffer (other-buffer))))
+;;   (set-buffer-modified-p (buffer-modified-p))
+  )
 
 (provide :lice-0.1/subr)

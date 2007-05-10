@@ -69,7 +69,7 @@
    (name :type string :initarg :name :accessor buffer-name)
    (mode-line-string :type string :initform "" :accessor buffer-mode-line-string)
    (modified :type boolean :initform nil :accessor buffer-modified-p)
-   (read-only :type boolean :initform nil :accessor buffer-read-only)
+   (read-only :type boolean :initform nil)
    (tick :type integer :initform 0 :accessor buffer-modified-tick :documentation
 	 "The buffer's tick counter. It is incremented for each change
 in text.")

@@ -253,4 +253,48 @@ not compute it, store the result, and return it."
            (cdr ,match)
            (memoize-store ,mem-var ,thing ,compute)))))
 
+(defun % (number divisor)
+  "same as mod."
+  (mod number divisor))
+
+(defun add-to-list (list-var element &optional append)
+  "Add ELEMENT to the value of LIST-VAR if it isn't there yet.
+The test for presence of ELEMENT is done with `equal'.
+If ELEMENT is added, it is added at the beginning of the list,
+unless the optional argument APPEND is non-nil, in which case
+ELEMENT is added at the end.
+
+The return value is the new value of LIST-VAR.
+
+If you want to use `add-to-list' on a variable that is not defined
+until a certain package is loaded, you should put the call to `add-to-list'
+into a hook function that will be run only after loading the package.
+`eval-after-load' provides one way to do this.  In some cases
+other hooks, such as major mode hooks, can do the job."
+  (if (member element (symbol-value list-var))
+      (symbol-value list-var)
+    (set list-var
+	 (if append
+	     (append (symbol-value list-var) (list element))
+	   (cons element (symbol-value list-var))))))
+
+(defmacro defsubst (name lambda-list &body body)
+  "Define an inline function.  The syntax is just like that of `defun'."
+  `(progn
+     (declaim (inline ,name))
+     (defun ,name ,lambda-list
+       ,@body)))
+
+(defun setcar (cell newcar)
+  "Set the car of cell to be newcar.  Returns newcar."
+  (setf (car cell) newcar))
+
+(depricate aset (setf aref))
+(defun aset (array idx newelt)
+  "Store into the element of ARRAY at index IDX the value NEWELT.
+Return NEWELT.  ARRAY may be a vector, a string, a char-table or a
+bool-vector.  IDX starts at 0."
+  (setf (aref array idx) newelt))
+
+
 (provide :lice-0.1/global)
