@@ -232,8 +232,269 @@ STRING should be given if the last search was by `string-match' on STRING."
 With optional non-nil ALL, force redisplay of all mode lines and
 header lines.  This function also forces recomputation of the
 menu bar menus and the frame title."
+  (declare (ignore all))
+  (error "unimplemented")
 ;;   (if all (save-excursion (set-buffer (other-buffer))))
 ;;   (set-buffer-modified-p (buffer-modified-p))
   )
+
+(defun add-minor-mode (toggle name &optional keymap after toggle-fun)
+  "Register a new minor mode.
+
+This is an XEmacs-compatibility function.  Use `define-minor-mode' instead.
+
+TOGGLE is a symbol which is the name of a buffer-local variable that
+is toggled on or off to say whether the minor mode is active or not.
+
+NAME specifies what will appear in the mode line when the minor mode
+is active.  NAME should be either a string starting with a space, or a
+symbol whose value is such a string.
+
+Optional KEYMAP is the keymap for the minor mode that will be added
+to `*minor-mode-map-list*'.
+
+Optional AFTER specifies that TOGGLE should be added after AFTER
+in `*minor-mode-list*'.
+
+Optional TOGGLE-FUN is an interactive function to toggle the mode.
+It defaults to (and should by convention be) TOGGLE.
+
+If TOGGLE has a non-nil `:included' property, an entry for the mode is
+included in the mode-line minor mode menu.
+If TOGGLE has a `:menu-tag', that is used for the menu item's label."
+  (unless (memq toggle minor-mode-list)
+    (push toggle minor-mode-list))
+
+  (unless toggle-fun (setq toggle-fun toggle))
+  (unless (eq toggle-fun toggle)
+    (setf (get toggle :minor-mode-function) toggle-fun))
+  ;; Add the name to the *minor-mode-list*.
+  (when name
+    (let ((existing (find toggle *minor-mode-list* :key 'first)))
+      (if existing
+	  (setf (cdr existing) (list name))
+	(let ((found (member after *minor-mode-list* :key 'first)))
+	  (if found
+	      (let ((rest (cdr found)))
+		(setf (cdr found) nil)
+		(nconc found (list (list toggle name)) rest))
+              (push (cons (list toggle name)
+                          *minor-mode-list*) *minor-mode-list*))))))
+;; FIXME: when menu support is added, use this code
+;;   ;; Add the toggle to the minor-modes menu if requested.
+;;   (when (get toggle :included)
+;;     (define-key mode-line-mode-menu
+;;       (vector toggle)
+;;       (list 'menu-item
+;; 	    (concat
+;; 	     (or (get toggle :menu-tag)
+;; 		 (if (stringp name) name (symbol-name toggle)))
+;; 	     (let ((mode-name (if (symbolp name) (symbol-value name))))
+;; 	       (if (and (stringp mode-name) (string-match "[^ ]+" mode-name))
+;; 		   (concat " (" (match-string 0 mode-name) ")"))))
+;; 	    toggle-fun
+;; 	    :button (cons :toggle toggle))))
+
+  ;; Add the map to the *minor-mode-map-list*.
+  (when keymap
+    (let ((existing (find toggle *minor-mode-map-list* :key 'minor-mode-map-variable)))
+      (if existing
+	  (setf (minor-mode-map-keymap existing) keymap)
+	(let ((found (member after *minor-mode-map-list* :key 'minor-mode-map-variable)))
+	  (if found
+	      (let ((rest (cdr found)))
+		(setf (cdr found) nil)
+		(nconc found (list (make-minor-mode-map :variable toggle :keymap keymap)) rest))
+	    (push (make-minor-mode-map :variable toggle :keymap keymap)
+                  *minor-mode-map-list*)))))))
+
+
+(defun replace-regexp-in-string (regexp rep string &optional
+                                 fixedcase literal subexp start)
+  "Replace all matches for REGEXP with REP in STRING.
+
+Return a new string containing the replacements.
+
+Optional arguments FIXEDCASE, LITERAL and SUBEXP are like the
+arguments with the same names of function `replace-match'.  If START
+is non-nil, start replacements at that index in STRING.
+
+REP is either a string used as the NEWTEXT arg of `replace-match' or a
+function.  If it is a function, it is called with the actual text of each
+match, and its value is used as the replacement text.  When REP is called,
+the match-data are the result of matching REGEXP against a substring
+of STRING.
+
+To replace only the first match (if any), make REGEXP match up to \\'
+and replace a sub-expression, e.g.
+  (replace-regexp-in-string \"\\\\(foo\\\\).*\\\\'\" \"bar\" \" foo foo\" nil nil 1)
+    => \" bar foo\"
+"
+
+  ;; To avoid excessive consing from multiple matches in long strings,
+  ;; don't just call `replace-match' continually.  Walk down the
+  ;; string looking for matches of REGEXP and building up a (reversed)
+  ;; list MATCHES.  This comprises segments of STRING which weren't
+  ;; matched interspersed with replacements for segments that were.
+  ;; [For a `large' number of replacements it's more efficient to
+  ;; operate in a temporary buffer; we can't tell from the function's
+  ;; args whether to choose the buffer-based implementation, though it
+  ;; might be reasonable to do so for long enough STRING.]
+  (let ((l (length string))
+	(start (or start 0))
+	matches str mb me)
+    (with-match-data
+      (while (and (< start l) (string-match regexp string start))
+	(setq mb (match-beginning 0)
+	      me (match-end 0))
+	;; If we matched the empty string, make sure we advance by one char
+	(when (= me mb) (setq me (min l (1+ mb))))
+	;; Generate a replacement for the matched substring.
+	;; Operate only on the substring to minimize string consing.
+	;; Set up match data for the substring for replacement;
+	;; presumably this is likely to be faster than munging the
+	;; match data directly in Lisp.
+	(string-match regexp (setq str (substring string mb me)))
+	(setq matches
+	      (cons (replace-match (if (stringp rep)
+				       rep
+				     (funcall rep (match-string 0 str)))
+				   fixedcase literal str subexp)
+		    (cons (substring string start mb)       ; unmatched prefix
+			  matches)))
+	(setq start me))
+      ;; Reconstruct a string from the pieces.
+      (setq matches (cons (substring string start l) matches)) ; leftover
+      (apply #'concat (nreverse matches)))))
+
+
+;;;; Key binding commands.
+
+(defcommand global-set-key ((key command)
+                            (:key "Set key globally: ")
+                            (:command "Set key ~a to command: "))
+  "Give KEY a global binding as COMMAND.
+COMMAND is the command definition to use; usually it is
+a symbol naming an interactively-callable function.
+KEY is a key sequence; noninteractively, it is a string or vector
+of characters or event types, and non-ASCII characters with codes
+above 127 (such as ISO Latin-1) can be included if you use a vector.
+
+Note that if KEY has a local binding in the current buffer,
+that local binding will continue to shadow any global binding
+that you make with this function."
+  ;;(interactive "KSet key globally: \nCSet key %s to command: ")
+  (or (vectorp key) (stringp key) (symbolp key) (clickp key)
+      (signal 'wrong-type-argument :type (list 'arrayp key)))
+  (define-key (current-global-map) key command))
+
+(defcommand local-set-key ((key command)
+                           (:key "Set key locally: ")
+                           (:command "Set key ~a locally to command: "))
+  "Give KEY a local binding as COMMAND.
+COMMAND is the command definition to use; usually it is
+a symbol naming an interactively-callable function.
+KEY is a key sequence; noninteractively, it is a string or vector
+of characters or event types, and non-ASCII characters with codes
+above 127 (such as ISO Latin-1) can be included if you use a vector.
+
+The binding goes in the current buffer's local map,
+which in most cases is shared with all other buffers in the same major mode."
+  ;;(interactive "KSet key locally: \nCSet key %s locally to command: ")
+  (let ((map (current-local-map)))
+    (or map
+	(use-local-map (setq map (make-sparse-keymap))))
+    (or (vectorp key) (stringp key)
+	(signal 'wrong-type-argument (list 'arrayp key)))
+    (define-key map key command)))
+
+(defun global-unset-key (key)
+  "Remove global binding of KEY.
+KEY is a string or vector representing a sequence of keystrokes."
+  (interactive "kUnset key globally: ")
+  (global-set-key key nil))
+
+(defun local-unset-key (key)
+  "Remove local binding of KEY.
+KEY is a string or vector representing a sequence of keystrokes."
+  (interactive "kUnset key locally: ")
+  (if (current-local-map)
+      (local-set-key key nil))
+  nil)
+
+
+;;;; substitute-key-definition and its subroutines.
+
+(defvar key-substitution-in-progress nil
+ "Used internally by `substitute-key-definition'.")
+
+(defun substitute-key-definition (olddef newdef keymap &optional oldmap prefix)
+  "Replace OLDDEF with NEWDEF for any keys in KEYMAP now defined as OLDDEF.
+In other words, OLDDEF is replaced with NEWDEF where ever it appears.
+Alternatively, if optional fourth argument OLDMAP is specified, we redefine
+in KEYMAP as NEWDEF those keys which are defined as OLDDEF in OLDMAP.
+
+If you don't specify OLDMAP, you can usually get the same results
+in a cleaner way with command remapping, like this:
+  \(define-key KEYMAP [remap OLDDEF] NEWDEF)
+\n(fn OLDDEF NEWDEF KEYMAP &optional OLDMAP)"
+  ;; Don't document PREFIX in the doc string because we don't want to
+  ;; advertise it.  It's meant for recursive calls only.  Here's its
+  ;; meaning
+
+  ;; If optional argument PREFIX is specified, it should be a key
+  ;; prefix, a string.  Redefined bindings will then be bound to the
+  ;; original key, with PREFIX added at the front.
+  (or prefix (setq prefix ""))
+  (let* ((scan (or oldmap keymap))
+	 (prefix1 (vconcat prefix [nil]))
+	 (key-substitution-in-progress
+	  (cons scan key-substitution-in-progress)))
+    ;; Scan OLDMAP, finding each char or event-symbol that
+    ;; has any definition, and act on it with hack-key.
+    (map-keymap
+     (lambda (char defn)
+       (aset prefix1 (length prefix) char)
+       (substitute-key-definition-key defn olddef newdef prefix1 keymap))
+     scan)))
+
+(defun substitute-key-definition-key (defn olddef newdef prefix keymap)
+  (let (inner-def skipped menu-item)
+    ;; Find the actual command name within the binding.
+    (el:if (eq (car-safe defn) 'menu-item)
+	(setq menu-item defn defn (nth 2 defn))
+      ;; Skip past menu-prompt.
+      (while (stringp (car-safe defn))
+	(push (pop defn) skipped))
+      ;; Skip past cached key-equivalence data for menu items.
+      (if (consp (car-safe defn))
+	  (setq defn (cdr defn))))
+    (el:if (or (eq defn olddef)
+	    ;; Compare with equal if definition is a key sequence.
+	    ;; That is useful for operating on function-key-map.
+	    (and (or (stringp defn) (vectorp defn))
+		 (equal defn olddef)))
+	(define-key keymap prefix
+	  (if menu-item
+	      (let ((copy (copy-sequence menu-item)))
+		(setcar (nthcdr 2 copy) newdef)
+		copy)
+	    (nconc (nreverse skipped) newdef)))
+      ;; Look past a symbol that names a keymap.
+      (setq inner-def
+	    (or (indirect-function defn t) defn))
+      ;; For nested keymaps, we use `inner-def' rather than `defn' so as to
+      ;; avoid autoloading a keymap.  This is mostly done to preserve the
+      ;; original non-autoloading behavior of pre-map-keymap times.
+      (if (and (keymapp inner-def)
+	       ;; Avoid recursively scanning
+	       ;; where KEYMAP does not have a submap.
+	       (let ((elt (lookup-key keymap prefix)))
+		 (or (null elt) (natnump elt) (keymapp elt)))
+	       ;; Avoid recursively rescanning keymap being scanned.
+	       (not (memq inner-def key-substitution-in-progress)))
+	  ;; If this one isn't being scanned already, scan it now.
+	  (substitute-key-definition olddef newdef keymap inner-def prefix)))))
+
 
 (provide :lice-0.1/subr)

@@ -2,6 +2,9 @@
 
 (in-package "LICE")
 
+;; for mouse click events
+(defstruct click where button)
+
 (defstruct key char control meta alt shift hyper super)
 ;; (defclass key ()
 ;;   ((char :type character :initarg :char :reader key-char)
@@ -49,11 +52,27 @@ for passing as the last argument to (apply #'make-key ...)"
 				 (#\S (list :shift t))
 				 (t (signal 'kbd-parse))))))
 
+(defvar *keysyms* nil
+  "An alist of keysyms that map a string to either a character or a symbol.")
+
+(defmacro define-keysym (string thing)
+  `(pushnew (cons ,string ,thing) *keysyms* :test 'equal))
+
+(define-keysym "RET" #\Newline)
+(define-keysym "TAB" #\Tab)
+(define-keysym "SPC" #\Space)
+
+(define-keysym "up" :up)
+(define-keysym "down" :down)
+(define-keysym "left" :left)
+(define-keysym "right" :right)
+(define-keysym "prior" :prior)
+
 (defun parse-char-name (string)
   "Return the character whose name is STRING."
-  (or (cond 
-        ((string= string "RET") #\Newline)
-        ((string= string "TAB") #\Tab))
+  (or (let ((sym (find string *keysyms* :test 'string= :key 'car)))
+        (when sym
+          (cdr sym)))
       (name-char string)
       (and (= (length string) 1)
 	   (char string 0))))
@@ -129,23 +148,57 @@ in case you use it as a menu with `x-popup-menu'."
   (or (get-keymap-theme keymap theme)
       (setf (gethash theme (keymap-themes keymap)) (make-hash-table :size 200 :test 'equalp))))
 
-(defun define-key (keymap key def &optional (theme :lice))
+(defgeneric define-key (keymap key def &optional theme)
+  (:documentation "In keymap, define key sequence key as def.
+keymap is a keymap."))
+
+(defmethod define-key (keymap (key vector) def &optional (theme :lice))
+  "for some weirdness in bindings.lisp"
+  (warn "unimplemented"))
+
+(defmethod define-key (keymap (key click) def &optional (theme :lice))
+  "Mouse click events"
+  (warn "unimplemented"))
+
+(defmethod define-key (keymap (key string) (def string) &optional (theme :lice))
+  "alias a key to another key."
+  (warn "unimplemented"))
+
+(defmethod define-key (keymap (key symbol) def &optional (theme :lice))
+  "Special events are represented as symbols."
+  (warn "unimplemented"))
+
+(defmethod define-key (keymap (key string) def &optional (theme :lice))
+  (define-key keymap (parse-key-seq key) def theme))
+
+(defmethod define-key (keymap (key list) def &optional (theme :lice))
+  (let ((map (lookup-key-internal keymap key nil theme nil t nil)))
+    ;; FIXME: do this error properly
+    (unless map (error "Key sequence %s starts with non-prefix key %s"))
+    (define-key map (car (last key)) def theme)))
+
+(defmethod define-key (keymap (key key) def &optional (theme :lice))
   (let ((map (get-keymap-theme-create keymap theme)))
     (setf (gethash #|(key-hashid key)|# key map) def)))
 
-(defun lookup-key-internal (keymap key accept-default theme norecurse)
+(defun lookup-key-internal (keymap key accept-default theme norecurse return-kmap check-parents)
+  "RETURN-KMAP means return the key's keymap."
   (let* ((map (get-keymap-theme keymap theme))
          ;; some maps may not have a hash table for the theme.
-         (cmd (and map (gethash #|(key-hashid key)|# key map))))
+         (cmd (and map (gethash (if (consp key) (car key) key)
+                                map))))
     (or
      ;; if the binding is another keymap, then lookup the rest of the key sequence
      (cond
+       ((and return-kmap
+             (= (length key) 1)
+                  keymap))
        ((and (keymapp cmd) (not norecurse))
-        (lookup-key-internal cmd (cdr key) accept-default theme norecurse))
+        (lookup-key-internal cmd (cdr key) accept-default theme norecurse return-kmap check-parents))
        (t cmd))
      ;; check parent for binding
-     (when (keymap-parent keymap)
-       (lookup-key-internal (keymap-parent keymap) key nil theme norecurse))
+     (when (and check-parents (keymap-parent keymap))
+       (lookup-key-internal (keymap-parent keymap) key nil theme norecurse return-kmap check-parents))
      (when accept-default
        (and map (gethash t map))))))
 
@@ -159,7 +212,7 @@ usable as a general function for probing keymaps.  However, if the
 third optional argument ACCEPT-DEFAULT is non-nil, `lookup-key' will
 recognize the default bindings, just as `read-key-sequence' does."
   (check-type keymap keymap)
-  (lookup-key-internal keymap key accept-default theme nil))
+  (lookup-key-internal keymap key accept-default theme nil nil t))
 
 (depricate set-keymap-parent (setf keymap-parent))
 (defun set-keymap-parent (keymap parent)
@@ -187,10 +240,17 @@ grandparent's bindings are also included and so on."
     (when (keymap-parent keymap)
       (map-keymap function (keymap-parent keymap) theme))))
 
+(defvar *esc-map* (make-sparse-keymap)
+  "Default keymap for ESC (meta) commands.
+The normal global definition of the character ESC indirects to this keymap.")
+
 (defvar *global-map* (make-sparse-keymap)
   "The top level global keymap.")
 
 (defvar *ctl-x-4-map* (make-sparse-keymap)
+  "The C-x 4 keymap.")
+
+(defvar *ctl-x-5-map* (make-sparse-keymap)
   "The C-x 4 keymap.")
 
 (defvar *ctl-x-map* (make-sparse-keymap)
@@ -202,119 +262,45 @@ grandparent's bindings are also included and so on."
 (defvar *ctl-h-map* (make-sparse-keymap)
   "The C-h keymap.")
 
+(defvar *function-key-map* (make-sparse-keymap)
+  "Keymap that translates key sequences to key sequences during input.
+This is used mainly for mapping ASCII function key sequences into
+real Emacs function key events (symbols).
+
+The `read-key-sequence' function replaces any subsequence bound by
+`function-key-map' with its binding.  More precisely, when the active
+keymaps have no binding for the current key sequence but
+`function-key-map' binds a suffix of the sequence to a vector or string,
+`read-key-sequence' replaces the matching suffix with its binding, and
+continues with the new sequence.
+
+If the binding is a function, it is called with one argument (the prompt)
+and its return value (a key sequence) is used.
+
+The events that come from bindings in `function-key-map' are not
+themselves looked up in `function-key-map'.
+
+For example, suppose `function-key-map' binds `ESC O P' to [f1].
+Typing `ESC O P' to `read-key-sequence' would return [f1].  Typing
+`C-x ESC O P' would return [?\\C-x f1].  If [f1] were a prefix
+key, typing `ESC O P x' would return [f1 x].")
+
 (defvar *current-global-map* *global-map*)
 
 (defvar *current-kmap* nil
   "The key map that the next key event will use to find a
 corresponding command.")
 
-(defun make-ctrl-h-map ()
-  (let ((kmap (make-sparse-keymap)))
-    (define-key kmap (make-key :char #\f) 'describe-symbol)
-    kmap))
-
-(defun make-ctrl-x-4-map ()
-  (let ((kmap (make-sparse-keymap)))
-    (define-key kmap (make-key :char #\b) 'switch-to-buffer-other-window)
-    kmap))
-
-(defun make-ctrl-x-map (ctl-x-4-map)
-  (let ((kmap (make-sparse-keymap)))
-    (define-key kmap (make-key :char #\e :control t) 'eval-last-sexp)
-    (define-key kmap (make-key :char #\b) 'switch-to-buffer)
-    (define-key kmap (make-key :char #\c :control t) 'save-buffers-kill-emacs)
-    (define-key kmap (make-key :char #\f :control t) 'find-file)
-    (define-key kmap (make-key :char #\s :control t) 'save-buffer)
-    (define-key kmap (make-key :char #\k) 'kill-buffer)
-    (define-key kmap (make-key :char #\o) 'other-window)
-    (define-key kmap (make-key :char #\1) 'delete-other-windows)
-    (define-key kmap (make-key :char #\2) 'split-window-vertically)
-    (define-key kmap (make-key :char #\3) 'split-window-horizontally)
-    (define-key kmap (make-key :char #\x :control t) 'exchange-point-and-mark)
-    (define-key kmap (make-key :char #\t :control t) 'transpose-lines)
-    (define-key kmap (make-key :char #\4) ctl-x-4-map)
-    kmap))
-
-(defun make-ctrl-c-map ()
-  (let ((kmap (make-sparse-keymap)))
-    kmap))
-
-(defun make-global-map (ctl-x-prefix ctl-c-prefix ctl-h-prefix)
-  "Generate self-insert commands for all printable characters. And
-more."
-  (let ((kmap (make-sparse-keymap)))
-    (loop for i in '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9
-		     #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j
-		     #\k #\l #\m #\n #\o #\p #\q #\r #\s #\t
-		     #\u #\v #\w #\x #\y #\z 
-		     #\A #\B #\C #\D #\E #\F #\G #\H #\I #\J
-		     #\K #\L #\M #\N #\O #\P #\Q #\R #\S #\T
-		     #\U #\V #\W #\X #\Y #\Z
-		     #\Space #\! #\" #\# #\$ #\% #\& #\' #\( 
-		     #\) #\* #\+ #\, #\- #\. #\/ #\: #\; #\< 
-		     #\= #\> #\? #\@ #\[ #\\ #\] #\^ #\_ #\` 
-		     #\| #\} #\~ #\{)
-	  do (define-key kmap (make-key :char i) 'self-insert-command))
-    (define-key kmap (make-key :char #\Return) 'newline)
-    (define-key kmap (make-key :char #\Newline) 'newline)
-    (define-key kmap (make-key :char #\o :control t) 'open-line)
-    (define-key kmap (make-key :char #\j :control t) 'newline)
-    (define-key kmap (make-key :char #\m :control t) 'newline)
-    (define-key kmap (make-key :char #\f :control t) 'forward-char)
-    (define-key kmap (make-key :char #\f :meta t) 'forward-word)
-    (define-key kmap (make-key :char #\f :control t :meta t) 'forward-sexp)
-    (define-key kmap (make-key :char #\b :control t :meta t) 'backward-sexp)
-    (define-key kmap (make-key :char #\n :control t) 'next-line)
-    (define-key kmap (make-key :char #\p :control t) 'previous-line)
-    (define-key kmap (make-key :char #\b :control t) 'backward-char)
-    (define-key kmap (make-key :char #\b :meta t) 'backward-word)
-    (define-key kmap (make-key :char #\d :control t) 'delete-char)
-    (define-key kmap (make-key :char #\d :meta t) 'kill-word)
-    (define-key kmap (make-key :char #\Rubout :meta t) 'backward-kill-word)
-    (define-key kmap (make-key :char #\Rubout) 'delete-backward-char)
-    (define-key kmap (make-key :char #\Delete) 'delete-backward-char)
-    (define-key kmap (make-key :char #\t :meta t) 'transpose-words)
-    (define-key kmap (make-key :char #\t :control t) 'transpose-chars)
-    ;;(define-key kmap (make-key :char #\h :control t) 'delete-backward-char)
-    (define-key kmap (make-key :char #\u :control t) 'universal-argument)
-    (define-key kmap (make-key :char #\a :control t) 'beginning-of-line)
-    (define-key kmap (make-key :char #\e :control t) 'end-of-line)
-    (define-key kmap (make-key :char #\g :control t) 'keyboard-quit)
-    (define-key kmap (make-key :char #\v :control t) 'scroll-up)
-    (define-key kmap (make-key :char #\v :meta t) 'scroll-down)
-    (define-key kmap (make-key :char #\k :control t) 'kill-line)
-    (define-key kmap (make-key :char #\w :control t) 'kill-region)
-    (define-key kmap (make-key :char #\y :control t) 'yank)
-    (define-key kmap (make-key :char #\y :meta t) 'yank-pop)
-    (define-key kmap (make-key :char #\w :meta t) 'kill-ring-save)
-    (define-key kmap (make-key :char #\> :meta t) 'end-of-buffer)
-    (define-key kmap (make-key :char #\< :meta t) 'beginning-of-buffer)
-    (define-key kmap (make-key :char #\x :meta t) 'execute-extended-command)
-    (define-key kmap (make-key :char #\: :meta t) 'eval-expression)
-    (define-key kmap (make-key :char #\Space :control t) 'set-mark-command)
-    (define-key kmap (make-key :char #\` :control t) 'set-mark-command)
-    (define-key kmap (make-key :char #\! :meta t) 'shell-command)
-    (define-key kmap (make-key :char #\Space :meta t) 'just-one-space)
-    (define-key kmap (make-key :char #\\ :control t :meta t) 'indent-region)
-    (define-key kmap (make-key :char #\a :control t :meta t) 'beginning-of-defun)
-    (define-key kmap (make-key :char #\e :control t :meta t) 'end-of-defun)
-    (define-key kmap (make-key :char #\_ :control t) 'undo)
-    (define-key kmap (make-key :char #\/ :control t) 'undo)
-    (define-key kmap (make-key :char #\} :meta t) 'forward-paragraph)
-    (define-key kmap (make-key :char #\{ :meta t) 'backward-paragraph)
-    (define-key kmap (make-key :char #\x :control t) ctl-x-prefix)
-    (define-key kmap (make-key :char #\c :control t) ctl-c-prefix)
-    (define-key kmap (make-key :char #\h :control t) ctl-h-prefix)
-    kmap))
-
-(defun make-global-keymaps ()
-  "Create the default global keymaps and store them in *global-kmap
-*ctl-x-map*, ..."
-  (setf *ctl-x-4-map* (make-ctrl-x-4-map)
-	*ctl-x-map* (make-ctrl-x-map *ctl-x-4-map*)
-	*ctl-c-map* (make-ctrl-c-map)
-	*ctl-h-map* (make-ctrl-h-map)
-	*global-map* (make-global-map *ctl-x-map* *ctl-c-map* *ctl-h-map*)))
+;; initialize a skeleton structure for the keymaps
+(define-key *global-map* "ESC" *esc-map*)
+(define-key *esc-map* "ESC" (make-sparse-keymap))
+(define-key *global-map* "C-x" *ctl-x-map*)
+(define-key *ctl-x-map* "n" (make-sparse-keymap))
+(define-key *global-map* "C-c" *ctl-c-map*)
+(define-key *global-map* "C-h" *ctl-h-map*)
+(define-key *ctl-x-map* "r" (make-sparse-keymap))
+(define-key *ctl-x-map* "a" (make-sparse-keymap))
+(define-key *ctl-x-map* "a i" (make-sparse-keymap))
 
 (defun copy-keymap (keymap)
   (declare (ignore keymap))
@@ -390,3 +376,129 @@ not be in the future."
 (defun apropos-internal ()
   (error "unimplemented"))
 
+;; This is a struct to make it easier to add new elements to, should
+;; we want to. Also, it makes code easier to read, I think.
+(defstruct minor-mode-map
+  variable keymap)
+
+(defvar *minor-mode-map-list* nil
+  "Alist of keymaps to use for minor modes.
+Each element looks like (VARIABLE . KEYMAP); KEYMAP is used to read
+key sequences and look up bindings iff VARIABLE's value is non-nil.
+If two active keymaps bind the same key, the keymap appearing earlier
+in the list takes precedence.")
+
+(define-buffer-local *minor-mode-overriding-map-list* nil
+  "Alist of keymaps to use for minor modes, in current major mode.
+This variable is an alist just like `*minor-mode-map-list*', and it is
+used the same way (and before `*minor-mode-map-list*'); however,
+it is provided for major modes to bind locally.")
+
+
+;; (defun make-ctrl-h-map ()
+;;   (let ((kmap (make-sparse-keymap)))
+;;     (define-key kmap (make-key :char #\f) 'describe-symbol)
+;;     kmap))
+
+;; (defun make-ctrl-x-4-map ()
+;;   (let ((kmap (make-sparse-keymap)))
+;;     (define-key kmap (make-key :char #\b) 'switch-to-buffer-other-window)
+;;     kmap))
+
+;; (defun make-ctrl-x-map (ctl-x-4-map)
+;;   (let ((kmap (make-sparse-keymap)))
+;;     (define-key kmap (make-key :char #\e :control t) 'eval-last-sexp)
+;;     (define-key kmap (make-key :char #\b) 'switch-to-buffer)
+;;     (define-key kmap (make-key :char #\c :control t) 'save-buffers-kill-emacs)
+;;     (define-key kmap (make-key :char #\f :control t) 'find-file)
+;;     (define-key kmap (make-key :char #\s :control t) 'save-buffer)
+;;     (define-key kmap (make-key :char #\k) 'kill-buffer)
+;;     (define-key kmap (make-key :char #\o) 'other-window)
+;;     (define-key kmap (make-key :char #\1) 'delete-other-windows)
+;;     (define-key kmap (make-key :char #\2) 'split-window-vertically)
+;;     (define-key kmap (make-key :char #\3) 'split-window-horizontally)
+;;     (define-key kmap (make-key :char #\x :control t) 'exchange-point-and-mark)
+;;     (define-key kmap (make-key :char #\t :control t) 'transpose-lines)
+;;     (define-key kmap (make-key :char #\4) ctl-x-4-map)
+;;     kmap))
+
+;; (defun make-ctrl-c-map ()
+;;   (let ((kmap (make-sparse-keymap)))
+;;     kmap))
+
+;; (defun make-global-map (ctl-x-prefix ctl-c-prefix ctl-h-prefix)
+;;   "Generate self-insert commands for all printable characters. And
+;; more."
+;;   (let ((kmap (make-sparse-keymap)))
+;;     (loop for i in '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9
+;; 		     #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j
+;; 		     #\k #\l #\m #\n #\o #\p #\q #\r #\s #\t
+;; 		     #\u #\v #\w #\x #\y #\z 
+;; 		     #\A #\B #\C #\D #\E #\F #\G #\H #\I #\J
+;; 		     #\K #\L #\M #\N #\O #\P #\Q #\R #\S #\T
+;; 		     #\U #\V #\W #\X #\Y #\Z
+;; 		     #\Space #\! #\" #\# #\$ #\% #\& #\' #\( 
+;; 		     #\) #\* #\+ #\, #\- #\. #\/ #\: #\; #\< 
+;; 		     #\= #\> #\? #\@ #\[ #\\ #\] #\^ #\_ #\` 
+;; 		     #\| #\} #\~ #\{)
+;; 	  do (define-key kmap (make-key :char i) 'self-insert-command))
+;;     (define-key kmap (make-key :char #\Return) 'newline)
+;;     (define-key kmap (make-key :char #\Newline) 'newline)
+;;     (define-key kmap (make-key :char #\o :control t) 'open-line)
+;;     (define-key kmap (make-key :char #\j :control t) 'newline)
+;;     (define-key kmap (make-key :char #\m :control t) 'newline)
+;;     (define-key kmap (make-key :char #\f :control t) 'forward-char)
+;;     (define-key kmap (make-key :char #\f :meta t) 'forward-word)
+;;     (define-key kmap (make-key :char #\f :control t :meta t) 'forward-sexp)
+;;     (define-key kmap (make-key :char #\b :control t :meta t) 'backward-sexp)
+;;     (define-key kmap (make-key :char #\n :control t) 'next-line)
+;;     (define-key kmap (make-key :char #\p :control t) 'previous-line)
+;;     (define-key kmap (make-key :char #\b :control t) 'backward-char)
+;;     (define-key kmap (make-key :char #\b :meta t) 'backward-word)
+;;     (define-key kmap (make-key :char #\d :control t) 'delete-char)
+;;     (define-key kmap (make-key :char #\d :meta t) 'kill-word)
+;;     (define-key kmap (make-key :char #\Rubout :meta t) 'backward-kill-word)
+;;     (define-key kmap (make-key :char #\Rubout) 'delete-backward-char)
+;;     (define-key kmap (make-key :char #\Delete) 'delete-backward-char)
+;;     (define-key kmap (make-key :char #\t :meta t) 'transpose-words)
+;;     (define-key kmap (make-key :char #\t :control t) 'transpose-chars)
+;;     ;;(define-key kmap (make-key :char #\h :control t) 'delete-backward-char)
+;;     (define-key kmap (make-key :char #\u :control t) 'universal-argument)
+;;     (define-key kmap (make-key :char #\a :control t) 'beginning-of-line)
+;;     (define-key kmap (make-key :char #\e :control t) 'end-of-line)
+;;     (define-key kmap (make-key :char #\g :control t) 'keyboard-quit)
+;;     (define-key kmap (make-key :char #\v :control t) 'scroll-up)
+;;     (define-key kmap (make-key :char #\v :meta t) 'scroll-down)
+;;     (define-key kmap (make-key :char #\k :control t) 'kill-line)
+;;     (define-key kmap (make-key :char #\w :control t) 'kill-region)
+;;     (define-key kmap (make-key :char #\y :control t) 'yank)
+;;     (define-key kmap (make-key :char #\y :meta t) 'yank-pop)
+;;     (define-key kmap (make-key :char #\w :meta t) 'kill-ring-save)
+;;     (define-key kmap (make-key :char #\> :meta t) 'end-of-buffer)
+;;     (define-key kmap (make-key :char #\< :meta t) 'beginning-of-buffer)
+;;     (define-key kmap (make-key :char #\x :meta t) 'execute-extended-command)
+;;     (define-key kmap (make-key :char #\: :meta t) 'eval-expression)
+;;     (define-key kmap (make-key :char #\Space :control t) 'set-mark-command)
+;;     (define-key kmap (make-key :char #\` :control t) 'set-mark-command)
+;;     (define-key kmap (make-key :char #\! :meta t) 'shell-command)
+;;     (define-key kmap (make-key :char #\Space :meta t) 'just-one-space)
+;;     (define-key kmap (make-key :char #\\ :control t :meta t) 'indent-region)
+;;     (define-key kmap (make-key :char #\a :control t :meta t) 'beginning-of-defun)
+;;     (define-key kmap (make-key :char #\e :control t :meta t) 'end-of-defun)
+;;     (define-key kmap (make-key :char #\_ :control t) 'undo)
+;;     (define-key kmap (make-key :char #\/ :control t) 'undo)
+;;     (define-key kmap (make-key :char #\} :meta t) 'forward-paragraph)
+;;     (define-key kmap (make-key :char #\{ :meta t) 'backward-paragraph)
+;;     (define-key kmap (make-key :char #\x :control t) ctl-x-prefix)
+;;     (define-key kmap (make-key :char #\c :control t) ctl-c-prefix)
+;;     (define-key kmap (make-key :char #\h :control t) ctl-h-prefix)
+;;     kmap))
+
+;; (defun make-global-keymaps ()
+;;   "Create the default global keymaps and store them in *global-kmap
+;; *ctl-x-map*, ..."
+;;   (setf *ctl-x-4-map* (make-ctrl-x-4-map)
+;; 	*ctl-x-map* (make-ctrl-x-map *ctl-x-4-map*)
+;; 	*ctl-c-map* (make-ctrl-c-map)
+;; 	*ctl-h-map* (make-ctrl-h-map)
+;; 	*global-map* (make-global-map *ctl-x-map* *ctl-c-map* *ctl-h-map*)))

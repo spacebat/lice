@@ -2,6 +2,10 @@
 
 (in-package "LICE")
 
+(define-buffer-local indent-tabs-mode t
+"*Indentation can insert tabs if this is non-nil.
+Setting this variable automatically makes it local to the current buffer.")
+
 (define-buffer-local *indent-line-function* 'indent-relative
   "Function to indent the current line.
 This function will be called with no arguments.

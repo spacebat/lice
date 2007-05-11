@@ -490,8 +490,10 @@ This function does not move point."
 A multibyte character is handled correctly."
   (char string 0))
 
-(defun char-to-string ()
-  (error "Unimplemented"))
+(defun char-to-string (char)
+"Convert arg CHAR to a string containing that character.
+usage: (char-to-string CHAR)"
+  (string char))
 
 (defun buffer-string ()
   (error "Unimplemented"))

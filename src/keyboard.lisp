@@ -2,6 +2,10 @@
 
 (in-package "LICE")
 
+(defvar help-event-list nil
+  "List of input events to recognize as meaning Help.
+These work just like the value of `help-char' (see that).")
+
 (define-condition quit (lice-condition)
   () (:documentation "A condition raised when the user aborted the
 operation (by pressing C-g, for instance)."))
@@ -40,39 +44,43 @@ The value is a list of KEYs."
 (defun dispatch-command (name)
   (let* ((cmd (lookup-command name))
 	 ;; (args (collect-command-args cmd))
-	 (*this-command* (command-name cmd))
+	 (*this-command* (and cmd (command-name cmd)))
 	 (*current-prefix-arg* *prefix-arg*))
     (clear-minibuffer)
-    (restart-case
-        (handler-bind
-            ((quit
-              (lambda (c)
-                (if *debug-on-quit*
-                    (signal c)
-                    (invoke-restart 'abort-command))))
-             (lice-condition
-              (lambda (c)
-                (if *debug-on-error*
-                    (signal c)
-                    (invoke-restart 'just-print-error c))))
-             (error 
-              (lambda (c)
-                (if *debug-on-error*
-                    (signal c)
-                    (invoke-restart 'just-print-error c)))))
-          (funcall (command-fn cmd)))
-      (abort-command ()
-        :report "Abort the command."
-        (message "Quit"))
-      (just-print-error (c)
-        :report "Abort and print error."
-        ;; we need a bell
-        (message "~a" c)))
-    (setf *last-command* *this-command*
-	  ;; reset command keys, since the command is over.
-	  *this-command-keys* nil)
-    ;; handle undo
-    (undo-boundary)))
+    (if cmd
+        (progn
+          (restart-case
+              (handler-bind
+                  ((quit
+                    (lambda (c)
+                      (if *debug-on-quit*
+                          (signal c)
+                          (invoke-restart 'abort-command))))
+                   (lice-condition
+                    (lambda (c)
+                      (if *debug-on-error*
+                          (signal c)
+                          (invoke-restart 'just-print-error c))))
+                   (error 
+                    (lambda (c)
+                      (if *debug-on-error*
+                          (signal c)
+                          (invoke-restart 'just-print-error c)))))
+                (funcall (command-fn cmd)))
+            (abort-command ()
+              :report "Abort the command."
+              (message "Quit"))
+            (just-print-error (c)
+              :report "Abort and print error."
+              ;; we need a bell
+              (message "~a" c)))
+          (setf *last-command* *this-command*)
+          ;; handle undo
+          (undo-boundary))
+        ;; blink
+        (message "Symbol's command is void: ~a" name)
+        ;; reset command keys, since the command is over.
+        *this-command-keys* nil)))
 
 ;;; events
 
@@ -91,19 +99,19 @@ events that invoked the current command."
                               (pop *unread-command-events*)
                               (wait-for-event)))
          (def (if *current-kmap*
-                  (lookup-key-internal *current-kmap* *current-event* t *current-keymap-theme* t)
+                  (lookup-key-internal *current-kmap* *current-event* t *current-keymap-theme* t nil t)
                   ;; no current kmap? 
                   (or 
                    (when *overriding-terminal-local-map* 
-                     (lookup-key-internal *overriding-terminal-local-map* *current-event* t *current-keymap-theme* t))
+                     (lookup-key-internal *overriding-terminal-local-map* *current-event* t *current-keymap-theme* t nil t))
                    (when *overriding-local-map* 
-                     (lookup-key-internal *overriding-local-map* *current-event* t *current-keymap-theme* t))
+                     (lookup-key-internal *overriding-local-map* *current-event* t *current-keymap-theme* t nil t))
                    (when (current-local-map)
-                     (lookup-key-internal (current-local-map) *current-event* t *current-keymap-theme* t))
+                     (lookup-key-internal (current-local-map) *current-event* t *current-keymap-theme* t nil t))
                    ;;(lookup-key-internal (major-mode-map (major-mode)) *current-event* t *current-keymap-theme* t)
                    ;; TODO: minor mode maps
                    ;; check the global map
-                   (lookup-key-internal *global-map* *current-event* t *current-keymap-theme* t)))))
+                   (lookup-key-internal *global-map* *current-event* t *current-keymap-theme* t nil t)))))
     (dformat +debug-v+ "~a ~s ~a~%"
 	     def #|(key-hashid *current-event*)|# *current-event* (key-char *current-event*))
     (if def
@@ -176,5 +184,13 @@ events that invoked the current command."
   (setf *current-buffer* (window-buffer (frame-selected-window (selected-frame))))
   (catch :unbound-key
     (next-event)))
+
+;;; Key bindings
+
+(define-key *global-map* "C-z" 'suspend-emacs)
+(define-key *ctl-x-map* "C-z" 'suspend-emacs)
+(define-key *global-map* "M-C-c" 'exit-recursive-edit)
+(define-key *global-map* "C-]" 'abort-recursive-edit)
+(define-key *global-map* "M-x" 'execute-extended-command)
 
 (provide :lice-0.1/input)

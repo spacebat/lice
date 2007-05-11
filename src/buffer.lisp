@@ -588,6 +588,21 @@ means that other_buffer is more likely to choose a relevant buffer."
   (when (buffer-read-only)
     (signal 'buffer-read-only)))
 
+(defun buffer-modified-p (&optional (buffer (current-buffer)))
+  "Return t if BUFFER was modified since its file was last read or saved.
+No argument or nil as argument means use current buffer as BUFFER."
+  (slot-value buffer 'modified-p))
+
+(defun (setf buffer-modified-p) (flag &optional (buf (current-buffer)))
+  "Mark current buffer as modified or unmodified according to FLAG.
+A non-nil FLAG means mark the buffer modified."
+  (setf (slot-value buf 'modified-p) (and flag t)))
+
+(defun set-buffer-modified-p (flag)
+  "Mark current buffer as modified or unmodified according to FLAG.
+A non-nil FLAG means mark the buffer modified."
+  (setf (buffer-modified-p) flag))
+
 (defun bufferp (object)
   "Return t if object is an editor buffer."
   (typep object 'buffer))
@@ -673,7 +688,9 @@ Note that this is overridden by the variable
 and this buffer is not full-frame width.")
 (make-variable-buffer-local 'truncate-lines)
 
-
+(define-buffer-local case-fold-search nil
+  "*Non-nil if searches and matches should ignore case.")
+(make-variable-buffer-local 'case-fold-search)
 
 (defun make-buffer-string (start end props &optional (buffer (current-buffer)))
   "Making strings from buffer contents.
@@ -702,5 +719,10 @@ buffer substrings."
       (subseq (buffer-data buffer)
 	      (buffer-char-to-aref buffer start)
 	      (1+ (buffer-char-to-aref buffer (1- end)))))))
+
+;;; Key bindings
+
+(define-key *ctl-x-map* "b" 'switch-to-buffer)
+(define-key *ctl-x-map* "k" 'kill-buffer)
 
 (provide :lice-0.1/buffer)

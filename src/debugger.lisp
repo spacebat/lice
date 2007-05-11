@@ -2,12 +2,6 @@
 
 (in-package "LICE")
 
-(defvar *debug-on-error* t
-  "Non-nil means enter the debugger if an unhandled error is signaled.")
-
-(defvar *debug-on-quit* nil
-  "Non-nil means enter the debugger if quit is signaled (C-g, for example).")
-
 (defvar *debugger-mode*
   (make-instance 'major-mode
                  :name "Debugger"

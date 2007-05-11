@@ -44,6 +44,9 @@
 (define-condition lice-condition ()
   () (:documentation "The base condition for all lice related errors."))
 
+(define-condition wrong-type-argument (lice-condition)
+    ((:type :initarg :type :accessor wrong-type-argument-type)))
+
 ;; (defun fmt (fmt &rest args)
 ;;   "A movitz hack function. FORMAT basically doesn't work, so i use this to get around it."
 ;;   (let ((s (make-array 100 :fill-pointer 0 :element-type 'character)))
@@ -58,12 +61,6 @@
 
 ;;; Lisp function we like to have
 
-(defun concat (&rest strings)
-  "Concatenate all the arguments and make the result a string.
-The result is a string whose elements are the elements of all the arguments.
-Each argument must be a string."
-  (apply 'concatenate 'string strings))
-
 (defmacro while (test &body body)
   "If TEST yields non-nil, eval BODY... and repeat.
 The order of execution is thus TEST, BODY, TEST, BODY and so on
@@ -71,11 +68,6 @@ until TEST returns nil."
   (if body
       `(loop while ,test do ,@body)
       `(loop while ,test)))
-
-(defun cdr-safe (object)
-  "Return the cdr of OBJECT if it is a cons cell, or else nil."
-  (when (consp object)
-    (cdr object)))
 
 (defvar *quit-code* 7
   "The terminal char code for the interrupt key.")
@@ -93,13 +85,6 @@ before making `inhibit-quit' nil.")
 
 (defvar *quit-flag* nil
   "Set to T when the user hit the quit key")
-  
-;; XXX: get rid of this function and all callers
-(defun assq (prop list)
-  "Return non-nil if key is `eq' to the car of an element of list.
-The value is actually the first element of list whose car is key.
-Elements of list that are not conses are ignored."
-  (assoc prop (remove-if 'listp list)))
 
 (defmacro depricate (symbol refer-to)
   "A macro to mark a symbol as depricated. This is done with
@@ -178,26 +163,6 @@ the hook's buffer-local value rather than its default value."
   (declare (ignore local))
   (setf (symbol-value hook) (remove function (symbol-value hook))))
 
-(depricate substring subseq)
-(defun substring (string from &optional (to (length string)))
-  "Return a substring of string, starting at index from and ending before to.
-to may be nil or omitted; then the substring runs to the end of string.
-from and to start at 0.  If either is negative, it counts from the end.
-
-This function allows vectors as well as strings."
-  (when (< from 0)
-    (setf from (max 0 (+ (length string) from))))
-  (when (< to 0)
-    (setf to (max 0 (+ (length string) to))))
-  (subseq string from to))
-
-(depricate memq member)
-(defun memq (elt list)
-  "Return non-nil if ELT is an element of LIST.
-Comparison done with `eq'.  The value is actually the tail of LIST
-whose car is ELT."
-  (member elt list :test 'eq))
-
 (defun int-to-string (n)
   "Return the decimal representation of number as a string.
 Uses a minus sign if negative.
@@ -253,10 +218,6 @@ not compute it, store the result, and return it."
            (cdr ,match)
            (memoize-store ,mem-var ,thing ,compute)))))
 
-(defun % (number divisor)
-  "same as mod."
-  (mod number divisor))
-
 (defun add-to-list (list-var element &optional append)
   "Add ELEMENT to the value of LIST-VAR if it isn't there yet.
 The test for presence of ELEMENT is done with `equal'.
@@ -285,16 +246,29 @@ other hooks, such as major mode hooks, can do the job."
      (defun ,name ,lambda-list
        ,@body)))
 
-(defun setcar (cell newcar)
-  "Set the car of cell to be newcar.  Returns newcar."
-  (setf (car cell) newcar))
 
-(depricate aset (setf aref))
-(defun aset (array idx newelt)
-  "Store into the element of ARRAY at index IDX the value NEWELT.
-Return NEWELT.  ARRAY may be a vector, a string, a char-table or a
-bool-vector.  IDX starts at 0."
-  (setf (aref array idx) newelt))
+(defvar *debug-on-error* t
+  "Non-nil means enter the debugger if an unhandled error is signaled.")
 
+(defvar *debug-on-quit* nil
+  "Non-nil means enter the debugger if quit is signaled (C-g, for example).")
+
+(defvar debug-ignored-errors nil
+  "*List of errors for which the debugger should not be called.
+Each element may be a condition-name or a regexp that matches error messages.
+If any element applies to a given error, that error skips the debugger
+and just returns to top level.
+This overrides the variable `debug-on-error'.
+It does not apply to errors handled by `condition-case'.")
+
+(defun purecopy (thing)
+  "Make a copy of object OBJ in pure storage.
+Recursively copies contents of vectors and cons cells.
+Does not copy symbols.  Copies strings without text properties."
+  thing)
+
+(defun garbage-collect ()
+  "Reclaim storage for Lisp objects no longer needed."
+  (warn "unimplemented"))
 
 (provide :lice-0.1/global)

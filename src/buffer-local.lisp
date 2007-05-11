@@ -122,6 +122,10 @@ The default value is seen in buffers that do not have their own values
 for this variable."
   (setf (default-value symbol) value))
 
+(defmacro setq-default (var value)
+  "Set the default value of variable var to value."
+  `(setf (default-value ',var) ,value))
+
 
 ;;; Some built-in buffer local variables
 

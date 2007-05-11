@@ -54,6 +54,45 @@ STRING should be given if the last search was by `string-match' on STRING."
 	  (substring string (match-beginning num) (match-end num))
           (buffer-substring (match-beginning num) (match-end num)))))
 
+(defun replace-match (newtext &optional fixedcase literal string subexp)
+  "Replace text matched by last search with NEWTEXT.
+Leave point at the end of the replacement text.
+
+If second arg FIXEDCASE is non-nil, do not alter case of replacement text.
+Otherwise maybe capitalize the whole text, or maybe just word initials,
+based on the replaced text.
+If the replaced text has only capital letters
+and has at least one multiletter word, convert NEWTEXT to all caps.
+Otherwise if all words are capitalized in the replaced text,
+capitalize each word in NEWTEXT.
+
+If third arg LITERAL is non-nil, insert NEWTEXT literally.
+Otherwise treat `\\' as special:
+  `\\&' in NEWTEXT means substitute original matched text.
+  `\\N' means substitute what matched the Nth `\\(...\\)'.
+       If Nth parens didn't match, substitute nothing.
+  `\\\\' means insert one `\\'.
+Case conversion does not apply to these substitutions.
+
+FIXEDCASE and LITERAL are optional arguments.
+
+The optional fourth argument STRING can be a string to modify.
+This is meaningful when the previous match was done against STRING,
+using `string-match'.  When used this way, `replace-match'
+creates and returns a new string made by copying STRING and replacing
+the part of STRING that was matched.
+
+The optional fifth argument SUBEXP specifies a subexpression;
+it says to replace just that subexpression with NEWTEXT,
+rather than replacing the entire matched text.
+This is, in a vague sense, the inverse of using `\\N' in NEWTEXT;
+`\\N' copies subexp N into NEWTEXT, but using N as SUBEXP puts
+NEWTEXT in place of subexp N.
+This is useful only after a regular expression search or match,
+since only regular expressions have distinguished subexpressions."
+  (declare (ignore newtext fixedcase literal string subexp))
+  (error "unimplemented"))
+
 
 (defun match-string-no-properties (num &optional string)
   "Return string of text matched by last search, without text properties.

@@ -96,3 +96,26 @@ Whichever character you type to run this command is inserted."
     (when (> arg 0)
       (insert-move-point (current-buffer) (key-char *current-event*)))))
 
+;;; Key bindings
+
+(define-key *global-map* "C-i" 'self-insert-command)
+
+(loop for i in '(#\0 #\1 #\2 #\3 #\4 #\5 #\6 #\7 #\8 #\9
+                 #\a #\b #\c #\d #\e #\f #\g #\h #\i #\j
+                 #\k #\l #\m #\n #\o #\p #\q #\r #\s #\t
+                 #\u #\v #\w #\x #\y #\z 
+                 #\A #\B #\C #\D #\E #\F #\G #\H #\I #\J
+                 #\K #\L #\M #\N #\O #\P #\Q #\R #\S #\T
+                 #\U #\V #\W #\X #\Y #\Z
+                 #\Space #\! #\" #\# #\$ #\% #\& #\' #\( 
+                 #\) #\* #\+ #\, #\- #\. #\/ #\: #\; #\< 
+                 #\= #\> #\? #\@ #\[ #\\ #\] #\^ #\_ #\` 
+                 #\| #\} #\~ #\{)
+   do (define-key *global-map* (make-key :char i) 'self-insert-command))
+
+(define-key *global-map* "C-a" 'beginning-of-line)
+(define-key *global-map* "C-b" 'backward-char)
+(define-key *global-map* "C-d" 'delete-char)
+(define-key *global-map* "C-e" 'end-of-line)
+(define-key *global-map* "C-f" 'forward-char)
+(define-key *global-map* "DEL" 'delete-backward-char)

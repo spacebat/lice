@@ -68,7 +68,7 @@
   ((file :type (or null pathname) :initarg :file :accessor buffer-file)
    (name :type string :initarg :name :accessor buffer-name)
    (mode-line-string :type string :initform "" :accessor buffer-mode-line-string)
-   (modified :type boolean :initform nil :accessor buffer-modified-p)
+   (modified-p :type boolean :initform nil)
    (read-only :type boolean :initform nil)
    (tick :type integer :initform 0 :accessor buffer-modified-tick :documentation
 	 "The buffer's tick counter. It is incremented for each change

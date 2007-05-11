@@ -49,7 +49,7 @@
 				 #+movitz (make-default-movitz-frame (get-buffer "*scratch*")))
 	      *selected-frame* (car *frame-list*)
 	      *process-list* nil)
-	(make-global-keymaps)
+	;;(make-global-keymaps)
 	(catch 'lice-quit 
 	  #+clisp
 	  (ext:with-keyboard

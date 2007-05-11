@@ -33,9 +33,11 @@ The argument object is not altered--the value is a copy."
 (defun upcase-region (beg end)
   (declare (ignore beg end))
   (error "Unimplemented"))  
+(setf (get 'upcase-region 'disabled) t)
 
 (defun downcase-region ()
   (error "Unimplemented"))
+(setf (get 'downcase-region 'disabled) t)
 
 (defun capitalize-region ()
   (error "Unimplemented"))
@@ -51,3 +53,11 @@ The argument object is not altered--the value is a copy."
 
 (defun capitalize-word ()
   (error "Unimplemented"))
+
+;;; Key bindings
+
+(define-key *ctl-x-map* "C-u" 'upcase-region)
+(define-key *ctl-x-map* "C-l" 'downcase-region)
+(define-key *global-map* "M-u" 'upcase-word)
+(define-key *global-map* "M-l" 'downcase-word)
+(define-key *global-map* "M-c" 'capitalize-word)

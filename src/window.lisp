@@ -976,4 +976,21 @@ WINDOW defaults to the selected window.
 This is updated by redisplay or by calling `set-window-start'."
   (marker-position (window-top window)))
 
+
+;;; Key bindings
+(define-key *ctl-x-map* "1" 'delete-other-windows)
+(define-key *ctl-x-map* "2" 'split-window)
+(define-key *ctl-x-map* "0" 'delete-window)
+(define-key *ctl-x-map* "o" 'other-window)
+(define-key *ctl-x-map* "^" 'enlarge-window)
+(define-key *ctl-x-map* "<" 'scroll-left)
+(define-key *ctl-x-map* ">" 'scroll-right)
+
+(define-key *global-map* "C-v" 'scroll-up)
+(define-key *global-map* "M-C-v" 'scroll-other-window)
+(define-key *global-map* "M-v" 'scroll-down)
+
+(define-key *global-map* "C-l" 'recenter)
+(define-key *global-map* "M-r" 'move-to-window-line)
+
 (provide :lice-0.1/window)
