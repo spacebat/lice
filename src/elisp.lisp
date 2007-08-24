@@ -15,7 +15,7 @@
 
 
 (cl:defun parse-interactive (thing)
-  (error "unimplemented"))
+  (error "unimplemented parse-interactive"))
 
 (defmacro defun (name lambda-list &body body)
   "Parse an elisp style defun and convert it to a cl defun or lice defcommand."

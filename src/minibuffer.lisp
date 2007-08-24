@@ -144,18 +144,6 @@ If the optional argument FRAME is specified, return the minibuffer window
 used by that frame."
   (frame-minibuffer-window frame))
 
-(defun message (string &rest arguments)
-  "Print a one-line message at the bottom of the screen."
-  ;; FIXME: properly implement the echo area
-  (when (zerop (frame-minibuffers-active (selected-frame)))
-    (let ((minibuffer (window-buffer (frame-minibuffer-window (selected-frame))))
-          (msg (apply #'format nil string arguments)))
-      (erase-buffer minibuffer)
-      (buffer-insert minibuffer msg)
-      (with-current-buffer (get-buffer-create "*messages*")
-        (goto-char (point-max))
-        (insert msg #\Newline)))))
-
 (defun clear-minibuffer ()
   "Erase the text in the minibuffer, unless it's active."
   (when (zerop (frame-minibuffers-active (selected-frame)))

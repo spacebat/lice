@@ -11,7 +11,7 @@
   )
 
 ;; FIXME: empty
-(defmacro defface (name colors docstring group)
+(defmacro defface (name colors docstring &key group)
   (declare (ignore name colors docstring group))
   )
 

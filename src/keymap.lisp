@@ -154,19 +154,19 @@ keymap is a keymap."))
 
 (defmethod define-key (keymap (key vector) def &optional (theme :lice))
   "for some weirdness in bindings.lisp"
-  (warn "unimplemented"))
+  (warn "unimplemented define-key"))
 
 (defmethod define-key (keymap (key click) def &optional (theme :lice))
   "Mouse click events"
-  (warn "unimplemented"))
+  (warn "unimplemented define-key"))
 
 (defmethod define-key (keymap (key string) (def string) &optional (theme :lice))
   "alias a key to another key."
-  (warn "unimplemented"))
+  (warn "unimplemented define-key"))
 
 (defmethod define-key (keymap (key symbol) def &optional (theme :lice))
   "Special events are represented as symbols."
-  (warn "unimplemented"))
+  (warn "unimplemented define-key"))
 
 (defmethod define-key (keymap (key string) def &optional (theme :lice))
   (define-key keymap (parse-key-seq key) def theme))
@@ -222,7 +222,7 @@ Return parent.  parent should be nil or another keymap."
 
 (defun make-keymap (&optional string)
   (declare (ignore string))
-  (error "unimplemented"))
+  (error "unimplemented make-keymap"))
 
 (defun map-keymap (function keymap &optional (theme :lice))
   "Call FUNCTION once for each event binding in KEYMAP.
@@ -304,26 +304,26 @@ corresponding command.")
 
 (defun copy-keymap (keymap)
   (declare (ignore keymap))
-  (error "unimplemented"))
+  (error "unimplemented copy-keymap"))
 
 (defun command-remapping ()
-  (error "unimplemented"))
+  (error "unimplemented command-remapping"))
 
 (defun key-binding (key &optional accept-default no-remap)
   (declare (ignore key accept-default no-remap))
-  (error "unimplemented"))
+  (error "unimplemented key-binding"))
 
 (defun local-key-binding ()
-  (error "unimplemented"))
+  (error "unimplemented local-key-binding"))
 
 (defun global-key-binding ()
-  (error "unimplemented"))
+  (error "unimplemented global-key-binding"))
 
 (defun minor-mode-key-binding ()
-  (error "unimplemented"))
+  (error "unimplemented minor-mode-key-binding"))
 
 (defun define-prefix-command ()
-  (error "unimplemented"))
+  (error "unimplemented define-prefix-command"))
 
 (defun use-global-map (keymap)
   (check-type keymap keymap)
@@ -347,34 +347,34 @@ not be in the future."
   *current-global-map*)
 
 (defun current-minor-mode-maps ()
-  (error "unimplemented"))
+  (error "unimplemented current-minor-mode-maps"))
 
 (defun current-active-maps ()
-  (error "unimplemented"))
+  (error "unimplemented current-active-maps"))
 
 (defun accessible-keymaps ()
-  (error "unimplemented"))
+  (error "unimplemented" accessible-keymaps))
 
 (defun key-description ()
-  (error "unimplemented"))
+  (error "unimplemented key-description"))
 
 (defun describe-vector ()
-  (error "unimplemented"))
+  (error "unimplemented describe-vector"))
 
 (defun single-key-description ()
-  (error "unimplemented"))
+  (error "unimplemented single-key-description"))
 
 (defun text-char-description ()
-  (error "unimplemented"))
+  (error "unimplemented text-char-description"))
 
 (defun where-is-internal ()
-  (error "unimplemented"))
+  (error "unimplemented where-is-internal"))
 
 (defun describe-buffer-bindings ()
-  (error "unimplemented"))
+  (error "unimplemented describe-buffer-bindings"))
 
 (defun apropos-internal ()
-  (error "unimplemented"))
+  (error "unimplemented apropos-internal"))
 
 ;; This is a struct to make it easier to add new elements to, should
 ;; we want to. Also, it makes code easier to read, I think.

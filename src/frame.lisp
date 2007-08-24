@@ -50,13 +50,13 @@ See also `frame-live-p'."
   (typep object 'frame))
 
 (defun frame-live-p ()
-  (error "unimplemented"))
+  (error "unimplemented frame-live-p"))
 
 (defun make-terminal-frame ()
-  (error "unimplemented"))
+  (error "unimplemented make-terminal-frame"))
 
 (defun handle-switch-frame ()
-  (error "unimplemented"))
+  (error "unimplemented handle-switch-frame"))
 
 (defun select-frame (frame)
   "Select the frame FRAME.
@@ -70,13 +70,13 @@ focus.  On a text-only terminal, the next redisplay will display FRAME.
 
 This function returns FRAME, or nil if FRAME has been deleted."
   (declare (ignore frame))
-  (error "unimplemented"))
+  (error "unimplemented select-frame"))
 
 (defun frame-root-window ()
-  (error "unimplemented"))
+  (error "unimplemented frame-root-window"))
 
 (defun frame-first-window ()
-  (error "unimplemented"))
+  (error "unimplemented frame-first-window"))
 
 (depricate set-frame-selected-window (setf frame-selected-window))
 (defun set-frame-selected-window (frame window)
@@ -91,85 +91,85 @@ If frame is the selected frame, this makes window the selected window."
   (copy-list *frame-list*))
 
 (defun next-frame ()
-  (error "unimplemented"))
+  (error "unimplemented next-frame"))
 
 (defun previous-frame ()
-  (error "unimplemented"))
+  (error "unimplemented previous-frame"))
 
 (defun delete-frame ()
-  (error "unimplemented"))
+  (error "unimplemented delete-frame"))
 
 (defun mouse-position ()
-  (error "unimplemented"))
+  (error "unimplemented mouse-position"))
 
 (defun mouse-pixel-position ()
-  (error "unimplemented"))
+  (error "unimplemented mouse-pixel-position"))
 
 (defun set-mouse-position ()
-  (error "unimplemented"))
+  (error "unimplemented set-mouse-position"))
 
 (defun set-mouse-pixel-position ()
-  (error "unimplemented"))
+  (error "unimplemented set-mouse-pixel-position"))
 
 (defun make-frame-visible ()
-  (error "unimplemented"))
+  (error "unimplemented make-frame-visible"))
 
 (defun make-frame-invisible ()
-  (error "unimplemented"))
+  (error "unimplemented make-frame-invisible"))
 
 (defun iconify-frame ()
-  (error "unimplemented"))
+  (error "unimplemented iconify-frame"))
 
 (defun frame-visible-p ()
-  (error "unimplemented"))
+  (error "unimplemented frame-visible-p"))
 
 (defun visible-frame-list ()
-  (error "unimplemented"))
+  (error "unimplemented visible-frame-list"))
 
 (defun raise-frame ()
-  (error "unimplemented"))
+  (error "unimplemented raise-frame"))
 
 (defun lower-frame ()
-  (error "unimplemented"))
+  (error "unimplemented lower-frame"))
 
 (defun redirect-frame-focus ()
-  (error "unimplemented"))
+  (error "unimplemented redirect-frame-focus"))
 
 (defun frame-focus ()
-  (error "unimplemented"))
+  (error "unimplemented frame-focus"))
 
 (defun frame-parameters ()
-  (error "unimplemented"))
+  (error "unimplemented frame-parameters"))
 
 (defun frame-parameter ()
-  (error "unimplemented"))
+  (error "unimplemented frame-parameter"))
 
 (defun modify-frame-parameters ()
-  (error "unimplemented"))
+  (error "unimplemented modify-frame-parameters"))
 
 (defun frame-char-height ()
-  (error "unimplemented"))
+  (error "unimplemented frame-char-height"))
 
 (defun frame-char-width ()
-  (error "unimplemented"))
+  (error "unimplemented frame-char-width"))
 
 (defun frame-pixel-height ()
-  (error "unimplemented"))
+  (error "unimplemented frame-pixel-height"))
 
 (defun frame-pixel-width ()
-  (error "unimplemented"))
+  (error "unimplemented frame-pixel-width"))
 
 (defun set-frame-height ()
-  (error "unimplemented"))
+  (error "unimplemented set-frame-height"))
 
 (defun set-frame-width ()
-  (error "unimplemented"))
+  (error "unimplemented set-frame-width"))
 
 (defun set-frame-size ()
-  (error "unimplemented"))
+  (error "unimplemented set-frame-size"))
 
 (defun set-frame-position ()
-  (error "unimplemented"))
+  (error "unimplemented set-frame-position"))
 
 
 ;; (defun x-get-resource ()

@@ -845,7 +845,7 @@ If you use consistent values for MINIBUF and ALL-FRAMES, you can use
 windows, eventually ending up back at the window you started with.
 `next-window' traverses the same cycle, in the reverse order."
   (declare (ignore window minibuf all-frames))
-  (error "unimplemented"))
+  (error "unimplemented previous-window"))
 
 (defcommand other-window ((arg &optional all-frames)
                           :prefix)

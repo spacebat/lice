@@ -73,10 +73,10 @@ With positive n, a non-empty line at the end counts as one line
               (+ n flines))))))
 
 (defun beginning_of_line ()
-  (error "unimplemented"))
+  (error "unimplemented beginning_of_line"))
 
 (defun end_of_line ()
-  (error "unimplemented"))
+  (error "unimplemented end_of_line"))
 
 (defcommand delete-char ()
   "Delete the following N characters."

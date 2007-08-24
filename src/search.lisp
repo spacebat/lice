@@ -91,7 +91,7 @@ NEWTEXT in place of subexp N.
 This is useful only after a regular expression search or match,
 since only regular expressions have distinguished subexpressions."
   (declare (ignore newtext fixedcase literal string subexp))
-  (error "unimplemented"))
+  (error "unimplemented replace-match"))
 
 
 (defun match-string-no-properties (num &optional string)
@@ -357,10 +357,10 @@ matched by the parenthesis constructions in regexp."
   "Given a string of words separated by word delimiters,
 compute a regexp that matches those exact words
 separated by arbitrary punctuation."
-  (error "unimplemented"))
+  (error "unimplemented wordify"))
 
 (defun word-search-forward (string &key (bound (begv)) (error t) count &aux (buffer (current-buffer)))
-  (error "unimplemented"))
+  (error "unimplemented word-search-forward"))
 
 (defun scan-buffer (buffer target start end count)
 "Search for COUNT instances of the character TARGET between START and END.

@@ -16,6 +16,7 @@
                  (:file "data")
                  (:file "custom")
                  (:file "commands")
+                 (:file "callint")
                  (:file "dired")
                  (:file "data-types")
                  (:file "charset")
@@ -50,18 +51,19 @@
                  #+clisp (:file "clisp-render")
                  (:file "indent")
 
+                 (:module emacs-lisp
+                          :serial t
+                          :components ((:file "easy-mmode")
+                                       (:file "lisp-mode")))
+
                  (:module lisp
                           :serial t
                           :components ((:file "subr")
                                        (:file "simple")
-                                       (:file "lisp-mode")
                                        (:file "lisp-indent")
                                        (:file "paragraphs")
-                                       (:file "bindings")))
-
-                 (:module emacs-lisp
-                          :serial t
-                          :components ((:file "easy-mmode")))
+                                       (:file "bindings")
+                                       (:file "paren")))
 
                  (:module textmodes
                           :serial t

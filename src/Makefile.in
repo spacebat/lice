@@ -15,5 +15,8 @@ all: lice
 lice: $(FILES)
 	$(LISP) $(LISP_OPTS)
 
+etags: TAGS
+	etags `find . -name \*.lisp` # we could use FILES but it just isn't always up to date
+
 clean:
 	rm -f *.fasl *.fas *.lib lice

@@ -39,3 +39,19 @@ This function allows vectors as well as strings."
 Comparison done with `eq'.  The value is actually the tail of LIST
 whose car is ELT."
   (member elt list :test 'eq))
+
+(depricate put (setf get))
+(defun put (symbol propname value)
+  "Store SYMBOL's PROPNAME property with value VALUE.
+It can be retrieved with `(get SYMBOL PROPNAME)'."
+  (setf (get symbol propname) value))
+
+(defun featurep (feature &optional subfeature)
+  "Returns t if FEATURE is present in this Emacs.
+
+Use this to conditionalize execution of lisp code based on the
+presence or absence of Emacs or environment extensions.
+Use `provide' to declare that a feature is available.  This function
+looks at the value of the variable `features'.  The optional argument
+SUBFEATURE can be used to check a specific subfeature of FEATURE."
+  (and (find feature *features*) t))

@@ -10,19 +10,19 @@ It ignores directory names if they match any string in this list which
 ends in a slash.")
 
 (defun directory-files ()
-  (error "unimplemented"))
+  (error "unimplemented directory-files"))
 
 (defun directory-files-and-attributes ()
-  (error "unimplemented"))
+  (error "unimplemented directory-files-and-attributes"))
 
 (defun file-name-completion ()
-  (error "unimplemented"))
+  (error "unimplemented file-name-completion"))
 
 (defun file-name-all-completions ()
-  (error "unimplemented"))
+  (error "unimplemented file-name-all-completions"))
 
 (defun file-attributes ()
-  (error "unimplemented"))
+  (error "unimplemented file-attributes"))
 
 (defun file-attributes-lessp ()
-  (error "unimplemented"))
+  (error "unimplemented file-attributes-lessp"))

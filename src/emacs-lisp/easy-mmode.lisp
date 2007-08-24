@@ -84,16 +84,17 @@ replacing its case-insensitive matches with the literal string in LIGHTER."
       (replace-regexp-in-string (regexp-quote lighter) lighter name t t))))
 
 ;;;###autoload
-(defalias 'easy-mmode-define-minor-mode 'define-minor-mode)
+;; FIXME: when aliases really work maybe uncomment this 
+;;(defalias 'easy-mmode-define-minor-mode 'define-minor-mode)
 ;;;###autoload
 (defmacro define-minor-mode ((mode doc ;;&optional init-value lighter keymap 
                               &key init-value lighter ((:global globalp)) extra-args set
-                              initialize group type (require t) keymap)
+                              initialize group type (require t) keymap
                              ;; FIXME: in the original any keys not
                              ;; above were added to extra-keywords,
                              ;; but i'm too lazy to do it that way
                              ;; atm. -sabetts
-                             extra-keywords
+                             extra-keywords)
                              &body body)
   "Define a new minor mode MODE.
 This function defines the associated control variable MODE, keymap MODE-map,
@@ -253,7 +254,7 @@ With zero or negative ARG turn mode off.
 ;;;###autoload
 (defalias 'easy-mmode-define-global-mode 'define-global-minor-mode)
 ;;;###autoload
-(defmacro define-global-minor-mode (global-mode mode turn-on &rest keys)
+(defmacro define-global-minor-mode (global-mode mode turn-on &key group global extra-keywords)
   "Make GLOBAL-MODE out of the buffer-local minor MODE.
 TURN-ON is a function that will be called with no args in every buffer
   and that should try to turn MODE on if applicable for that buffer.
@@ -275,42 +276,32 @@ call another major mode in their body."
   (let* ((global-mode-name (symbol-name global-mode))
 	 (pretty-name (easy-mmode-pretty-mode-name mode))
 	 (pretty-global-name (easy-mmode-pretty-mode-name global-mode))
-	 (group nil)
-	 (extra-keywords nil)
 	 (MODE-buffers (intern (concat global-mode-name "-buffers")))
 	 (MODE-enable-in-buffers
 	  (intern (concat global-mode-name "-enable-in-buffers")))
 	 (MODE-check-buffers
 	  (intern (concat global-mode-name "-check-buffers")))
 	 (MODE-cmhh (intern (concat global-mode-name "-cmhh")))
-	 (MODE-major-mode (intern (concat (symbol-name mode) "-major-mode")))
-	 keyw)
+	 (MODE-major-mode (intern (concat (symbol-name mode) "-major-mode"))))
 
-    ;; Check keys.
-    (while (keywordp (setq keyw (car keys)))
-      (setq keys (cdr keys))
-      (case keyw
-	(:group (setq group (nconc group (list :group (pop keys)))))
-	(:global (setq keys (cdr keys)))
-	(t (push keyw extra-keywords) (push (pop keys) extra-keywords))))
+    ;; FIXME: :group can occur multiple times in the emacs version but not in this one.
 
-    (unless group
-      ;; We might as well provide a best-guess default group.
-      (setq group
-	    `(:group ',(intern (replace-regexp-in-string
-				"-mode\\'" "" (symbol-name mode))))))
+    ;; We might as well provide a best-guess default group.
+    (setq group
+          `(:group ,(or group '(intern (replace-regexp-in-string
+                                        "-mode\\'" "" (symbol-name mode))))))
 
     `(progn
        (defvar ,MODE-major-mode nil)
        (make-variable-buffer-local ',MODE-major-mode)
        ;; The actual global minor-mode
        (define-minor-mode ,global-mode
-	 ,(format "Toggle %s in every buffer.
-With prefix ARG, turn %s on if and only if ARG is positive.
-%s is actually not turned on in every buffer but only in those
-in which `%s' turns it on."
+	 ,(format nil "Toggle ~a in every buffer.
+With prefix ARG, turn ~a on if and only if ARG is positive.
+~a is actually not turned on in every buffer but only in those
+in which `~s' turns it on."
 		  pretty-name pretty-global-name pretty-name turn-on)
-	 :global t ,@group ,@(nreverse extra-keywords)
+	 (:global t ,@group ,@(nreverse extra-keywords))
 
 	 ;; Setup hook to handle future mode changes and new buffers.
 	 (el:if ,global-mode
@@ -328,9 +319,10 @@ in which `%s' turns it on."
 	   (with-current-buffer buf
 	     (if ,global-mode (,turn-on) (when ,mode (,mode -1))))))
 
-       ;; Autoloading define-global-minor-mode autoloads everything
-       ;; up-to-here.
-       :autoload-end
+;; FIXME: when we figure out autoload stuff maybe uncomment this -sabetts
+;;        ;; Autoloading define-global-minor-mode autoloads everything
+;;        ;; up-to-here.
+;;        :autoload-end
 
        ;; List of buffers left to process.
        (defvar ,MODE-buffers nil)

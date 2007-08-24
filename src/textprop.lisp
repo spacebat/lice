@@ -524,7 +524,7 @@ the current buffer), START and END are buffer positions (integers or
 markers).  If OBJECT is a string, START and END are 0-based indices into it.
 Return t if any property was actually removed, nil otherwise."
   (declare (ignore start and list-of-properties object))
-  (error "unimplemented"))
+  (error "unimplemented remove-list-of-text-properties"))
 
 	   
 (provide :lice-0.1/textprop)

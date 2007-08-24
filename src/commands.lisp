@@ -2,17 +2,6 @@
 
 (in-package "LICE")
 
-(defvar *prefix-arg* nil
-  "The value of the prefix argument for the next editing command.
-It may be a number, or the symbol `-' for just a minus sign as arg,
-or a list whose car is a number for just one or more C-u's
-or nil if no argument has been specified.
-
-You cannot examine this variable to find the argument for this command
-since it has been set to nil by the time you can look.
-Instead, you should use the variable `current-prefix-arg', although
-normally commands can get this prefix argument with (interactive \"P\").")
-
 (defclass command ()
   ((name :type symbol :initarg :name :accessor command-name)
    (args :type list :initarg :args :accessor command-args)
@@ -35,26 +24,7 @@ normally commands can get this prefix argument with (interactive \"P\").")
 	      :name ',name
 	      :args ',interactive-args
 	      :doc ,(when (typep (first body) 'string) (first body))
-	      :fn (lambda ()
-		    (let ((,tmp (list ,@(mapcar (lambda (a)
-						  (if (listp a)
-						      `(funcall (gethash ,(first a) *command-arg-type-hash*) ,@(cdr a))
-						    `(funcall (gethash ,a *command-arg-type-hash*))))
-						interactive-args))))
-		      ;; XXX: Is this a sick hack?  We need to reset the
-		      ;; prefix-arg at the right time. After the command
-		      ;; is executed we can't because the universal
-		      ;; argument code sets the prefix-arg for the next
-		      ;; command. The Right spot seems to be to reset it
-		      ;; once a command is about to be executed, and
-		      ;; after the prefix arg has been gathered to be
-		      ;; used in the command. Which is right here.
-		      (setf *prefix-arg* nil)
-		      ;; Note that we use the actual function. If the
-		      ;; function is redefined, the command will
-		      ;; continue to be defined and will call the
-		      ;; function declared above, not the redefined one.
-		      (apply #',name ,tmp))))))))
+              :fn #',name)))))
 
 (defgeneric lookup-command (name)
   (:documentation "lookup the command named NAME."))
@@ -66,11 +36,6 @@ normally commands can get this prefix argument with (interactive \"P\").")
   ;; FIXME: this can fill the keyword package with lots of junk
   ;; symbols.
   (gethash (intern (string-upcase name) "KEYWORD") *commands*))
-
-(defun call-command (name &rest args)
-  "Use this command to call an interactive command from a lisp program."
-  (let ((cmd (lookup-command name)))
-    (apply (command-fn cmd) args)))
 
 (defvar *command-arg-type-hash* (make-hash-table)
   "A hash table of symbols. each symbol is an interactive argument

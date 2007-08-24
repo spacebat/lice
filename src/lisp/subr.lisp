@@ -233,7 +233,7 @@ With optional non-nil ALL, force redisplay of all mode lines and
 header lines.  This function also forces recomputation of the
 menu bar menus and the frame title."
   (declare (ignore all))
-  (error "unimplemented")
+  (error "unimplemented force-mode-line-update")
 ;;   (if all (save-excursion (set-buffer (other-buffer))))
 ;;   (set-buffer-modified-p (buffer-modified-p))
   )

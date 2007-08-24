@@ -520,10 +520,6 @@ the window-buffer correspondences."
       (record-buffer buffer))
     (set-window-buffer w buffer)))
 
-(defcommand save-buffers-kill-emacs ()
-  ;; TODO: save-some-buffers
-  (throw 'lice-quit t))
-
 (defun eval-echo (string)
   ;; FIXME: don't just abandon the output
   (let* ((stream (make-string-output-stream))
@@ -714,22 +710,6 @@ yanking point; just return the Nth kill forward."
   (insert (current-kill 1)))
 
 ;;; universal argument
-
-(defun prefix-numeric-value (prefix)
-  "Return numeric meaning of raw prefix argument RAW.
-A raw prefix argument is what you get from :raw-prefix.
-Its numeric meaning is what you would get from :prefix."
-  ;; TODO
-  (cond ((null prefix)
-	 1)
-	((eq prefix '-)
-	 -1)
-	((and (consp prefix)
-	      (integerp (car prefix)))
-	 (car prefix))
-	((integerp prefix)
-	 prefix)
-	(t 1)))
 
 (defun prefix-arg ()
   "Return numeric meaning of *prefix-arg*"
@@ -1801,11 +1781,11 @@ and the function returns nil.  Field boundaries are not noticed if
 
 (defun line-number-mode (&optional arg)
   ""
-  (warn "Unimplemented"))
+  (warn "Unimplemented line-number-mode"))
 
 (defun column-number-mode (&optional arg)
   ""
-  (warn "Unimplemented"))
+  (warn "Unimplemented column-number-mode"))
 
 
 (provide :lice-0.1/simple)

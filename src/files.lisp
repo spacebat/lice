@@ -174,4 +174,35 @@ the last real save, but optional arg FORCE non-nil means delete anyway."
 	   (file-error () nil))
 	 (set-buffer-auto-saved))))
 
+(defcommand save-buffers-kill-emacs ()
+  ;; TODO: save-some-buffers
+  (kill-emacs))
+
+;;; Key bindings
+
+(define-key *ctl-x-map* "C-f" 'find-file)
+(define-key *ctl-x-map* "C-r" 'find-file-read-only)
+(define-key *ctl-x-map* "C-v" 'find-alternate-file)
+(define-key *ctl-x-map* "C-s" 'save-buffer)
+(define-key *ctl-x-map* "s" 'save-some-buffers)
+(define-key *ctl-x-map* "C-w" 'write-file)
+(define-key *ctl-x-map* "i" 'insert-file)
+(define-key *esc-map* "~" 'not-modified)
+(define-key *ctl-x-map* "C-d" 'list-directory)
+(define-key *ctl-x-map* "C-c" 'save-buffers-kill-emacs)
+(define-key *ctl-x-map* "C-q" 'toggle-read-only)
+
+(define-key *ctl-x-4-map* "f" 'find-file-other-window)
+(define-key *ctl-x-4-map* "r" 'find-file-read-only-other-window)
+(define-key *ctl-x-4-map* "C-f" 'find-file-other-window)
+(define-key *ctl-x-4-map* "b" 'switch-to-buffer-other-window)
+(define-key *ctl-x-4-map* "C-o" 'display-buffer)
+
+(define-key *ctl-x-5-map* "b" 'switch-to-buffer-other-frame)
+(define-key *ctl-x-5-map* "f" 'find-file-other-frame)
+(define-key *ctl-x-5-map* "C-f" 'find-file-other-frame)
+(define-key *ctl-x-5-map* "r" 'find-file-read-only-other-frame)
+(define-key *ctl-x-5-map* "C-o" 'display-buffer-other-frame)
+
+
 (provide :lice-0.1/files)

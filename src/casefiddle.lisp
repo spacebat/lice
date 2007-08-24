@@ -32,27 +32,27 @@ The argument object is not altered--the value is a copy."
 
 (defun upcase-region (beg end)
   (declare (ignore beg end))
-  (error "Unimplemented"))  
+  (error "Unimplemented upcase-region"))
 (setf (get 'upcase-region 'disabled) t)
 
 (defun downcase-region ()
-  (error "Unimplemented"))
+  (error "Unimplemented downcase-region"))
 (setf (get 'downcase-region 'disabled) t)
 
 (defun capitalize-region ()
-  (error "Unimplemented"))
+  (error "Unimplemented capitalize-region"))
 
 (defun upcase-initials-region ()
-  (error "Unimplemented"))
+  (error "Unimplemented upcase-initials-region"))
 
 (defun upcase-word ()
-  (error "Unimplemented"))
+  (error "Unimplemented upcase-word"))
 
 (defun downcase-word ()
-  (error "Unimplemented"))
+  (error "Unimplemented downcase-word"))
 
 (defun capitalize-word ()
-  (error "Unimplemented"))
+  (error "Unimplemented apitalize-word"))
 
 ;;; Key bindings
 

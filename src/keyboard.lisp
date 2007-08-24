@@ -2,6 +2,12 @@
 
 (in-package "LICE")
 
+(defvar deactivate-mark nil
+  "If an editing command sets this to t, deactivate the mark afterward.
+The command loop sets this to nil before each command,
+and tests the value when the command returns.
+Buffer modification stores t in this variable.")
+
 (defvar help-event-list nil
   "List of input events to recognize as meaning Help.
 These work just like the value of `help-char' (see that).")
@@ -20,13 +26,6 @@ when the command finishes. The command can change this value if it
 wants to change what *last-command* will be set to. Used in the `yank'
 and `yank-pop' commands.")
 
-(defvar *current-prefix-arg* nil
-  "The value of the prefix argument for this editing command.
-It may be a number, or the symbol `-' for just a minus sign as arg,
-or a list whose car is a number for just one or more C-u's
-or nil if no argument has been specified.
-This is what `(interactive \"P\")' returns.")
-
 ;; (defun collect-command-args (cmd)
 ;;   "Return a list of values (some collected from the user) to pass to the CMD function."
 ;;   (mapcar (lambda (arg)
@@ -41,6 +40,7 @@ This is what `(interactive \"P\")' returns.")
 The value is a list of KEYs."
   *this-command-keys*)
 
+;; FIXME some of this should go in call-interactively
 (defun dispatch-command (name)
   (let* ((cmd (lookup-command name))
 	 ;; (args (collect-command-args cmd))
@@ -66,7 +66,7 @@ The value is a list of KEYs."
                       (if *debug-on-error*
                           (signal c)
                           (invoke-restart 'just-print-error c)))))
-                (funcall (command-fn cmd)))
+                (call-interactively cmd))
             (abort-command ()
               :report "Abort the command."
               (message "Quit"))
@@ -78,9 +78,9 @@ The value is a list of KEYs."
           ;; handle undo
           (undo-boundary))
         ;; blink
-        (message "Symbol's command is void: ~a" name)
-        ;; reset command keys, since the command is over.
-        *this-command-keys* nil)))
+        (message "Symbol's command is void: ~a" name))
+    ;; reset command keys, since the command is over.
+    *this-command-keys* nil))
 
 ;;; events
 
@@ -176,14 +176,26 @@ events that invoked the current command."
                               internal-time-units-per-second)
                            time)))))
 
+(defun command-loop ()
+  (labels ((ensure-current-buffer ()
+             ;; Make sure the current window's buffer is selected.
+             (unless (eq *current-buffer* (window-buffer (selected-window)))
+               (setf *current-buffer* (window-buffer (selected-window))))))
+  (setf *prefix-arg* nil
+        *last-prefix-arg* nil)
+  (loop 
+     (ensure-current-buffer)
+     (setf deactivate-mark nil)
 
-(defun top-level-next-event ()
-  ;; Bind this locally so its value is restored after the
-  ;; command is dispatched. Otherwise, calls to set-buffer
-  ;; would stick.
-  (setf *current-buffer* (window-buffer (frame-selected-window (selected-frame))))
-  (catch :unbound-key
-    (next-event)))
+     (frame-render (selected-frame))
+
+     ;; execute command
+     (catch :unbound-key
+       (next-event))
+     ;; A filter may have run while we were reading the input.
+     (ensure-current-buffer)
+
+))
 
 ;;; Key bindings
 

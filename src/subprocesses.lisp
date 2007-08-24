@@ -199,7 +199,7 @@ service is name of the service desired, or an integer specifying
  a port number to connect to."
   (declare (ignore name buffer host service))
   ;; TODO: implement
-  (error "unimplemented")
+  (error "unimplemented open-network-stream")
   )
   
 (defvar *shell-file-name* (getenv "SHELL")

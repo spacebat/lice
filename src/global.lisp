@@ -269,6 +269,6 @@ Does not copy symbols.  Copies strings without text properties."
 
 (defun garbage-collect ()
   "Reclaim storage for Lisp objects no longer needed."
-  (warn "unimplemented"))
+  (warn "unimplemented garbage-collect"))
 
 (provide :lice-0.1/global)

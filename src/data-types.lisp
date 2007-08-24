@@ -235,6 +235,16 @@ scrolling up (towards the beginning of the buffer)."))
    (height :type fixnum :initarg :height :accessor frame-height)
    (minibuffer-window :type window :initarg :minibuffer-window :accessor frame-minibuffer-window)
    (minibuffers-active :type fixnum :initform 0 :initarg minibuffers-active :accessor frame-minibuffers-active)
+   ;; echo-area-current is the buffer that holds the current (desired) echo area message,
+   ;; or nil if none is desired right now.
+
+   ;; echo-area-prev is the buffer that holds the previously displayed echo area message,
+   ;; or nil to indicate no message.  This is normally what's on the screen now.
+
+   ;; These two can point to the same buffer.  That happens when the last
+   ;; message output by the user (or made by echoing) has been displayed. 
+   (echo-area-current :initarg echo-area-current :accessor frame-echo-area-current)
+   (echo-area-prev :initarg echo-area-current :accessor frame-echo-area-prev)
    (selected-window :type window :initarg :selected-window :accessor frame-selected-window))
   (:documentation "A Lice frame is super cool."))
 

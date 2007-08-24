@@ -496,106 +496,135 @@ usage: (char-to-string CHAR)"
   (string char))
 
 (defun buffer-string ()
-  (error "Unimplemented"))
+  (error "Unimplemented buffer-string"))
 
 (defun field-string-no-properties ()
-  (error "Unimplemented"))
+  (error "Unimplemented field-string-no-properties"))
 
 (defun delete-field ()
-  (error "Unimplemented"))
+  (error "Unimplemented delete-field"))
 
 (defmacro save-current-buffer ()
-  (error "Unimplemented"))
+  (error "Unimplemented save-current-buffer"))
 
 (defun bufsize ()
-  (error "Unimplemented"))
+  (error "Unimplemented bufsize"))
 
 (defun point-min-marker ()
-  (error "Unimplemented"))
+  (error "Unimplemented point-min-marker"))
 
 (defun point-max-marker ()
-  (error "Unimplemented"))
+  (error "Unimplemented point-max-marker"))
 
 (defun gap-position ()
-  (error "Unimplemented"))
+  (error "Unimplemented gap-position"))
 
 (defun gap-size ()
-  (error "Unimplemented"))
+  (error "Unimplemented gap-size"))
 
 (defun position-bytes ()
-  (error "Unimplemented"))
+  (error "Unimplemented position-bytes"))
 
 (defun byte-to-position ()
-  (error "Unimplemented"))
+  (error "Unimplemented byte-to-position"))
 
 (defun previous-char ()
-  (error "Unimplemented"))
+  (error "Unimplemented previous-char"))
 
 (defun insert-before-markers ()
-  (error "Unimplemented"))
+  (error "Unimplemented insert-before-markers"))
 
 (defun insert-and-inherit ()
-  (error "Unimplemented"))
+  (error "Unimplemented insert-and-inherit"))
 
 (defun insert-and-inherit-before-markers ()
-  (error "Unimplemented"))
+  (error "Unimplemented insert-and-inherit-before-markers"))
 
 (defun user-login-name ()
-  (error "Unimplemented"))
+  (error "Unimplemented user-login-name"))
 
 (defun user-real-login-name ()
-  (error "Unimplemented"))
+  (error "Unimplemented user-real-login-name"))
 
 (defun user-uid ()
-  (error "Unimplemented"))
+  (error "Unimplemented user-uid"))
 
 (defun user-real-uid ()
-  (error "Unimplemented"))
+  (error "Unimplemented user-real-uid"))
 
 (defun user-full-name ()
-  (error "Unimplemented"))
+  (error "Unimplemented user-full-name"))
 
 (defun emacs-pid ()
-  (error "Unimplemented"))
+  (error "Unimplemented emacs-pid"))
 
 (defun current-time ()
-  (error "Unimplemented"))
+  (error "Unimplemented" current-time))
 
 (defun format-time-string ()
-  (error "Unimplemented"))
+  (error "Unimplemented format-time-string"))
 
 (defun float-time ()
-  (error "Unimplemented"))
+  (error "Unimplemented float-time"))
 
 (defun decode-time ()
-  (error "Unimplemented"))
+  (error "Unimplemented decode-time"))
 
 (defun encode-time ()
-  (error "Unimplemented"))
+  (error "Unimplemented encode-time"))
 
 (defun current-time-string ()
-  (error "Unimplemented"))
+  (error "Unimplemented current-time-string"))
 
 (defun current-time-zone ()
-  (error "Unimplemented"))
+  (error "Unimplemented current-time-zone"))
 
 (defun set-time-zone-rule ()
-  (error "Unimplemented"))
+  (error "Unimplemented set-time-zone-rule"))
 
 (defun system-name ()
-  (error "Unimplemented"))
+  (error "Unimplemented system-name"))
+
+(defun message (string &rest arguments)
+  "Display a message at the bottom of the screen.
+The message also goes into the `*Messages*' buffer.
+\(In keyboard macros, that's all it does.)
+Return the message.
+
+The first argument is a format control string, and the rest are data
+to be formatted under control of the string.  See `format' for details.
+
+Note: Use (message \"~s\" VALUE) to print the value of expressions and
+variables to avoid accidentally interpreting `~' as format specifiers.
+
+If the first argument is nil or the empty string, the function clears
+any existing message; this lets the minibuffer contents show.  See
+also `current-message'."
+  (check-type string string)
+  ;; FIXME: properly implement the echo area
+  (when (zerop (frame-minibuffers-active (selected-frame)))
+    (let ((minibuffer (window-buffer (frame-minibuffer-window (selected-frame))))
+          (msg (apply #'format nil string arguments)))
+      (erase-buffer minibuffer)
+      (buffer-insert minibuffer msg)
+      (with-current-buffer (get-buffer-create "*messages*")
+        (goto-char (point-max))
+        (insert msg #\Newline)))))
 
 (defun message-box ()
-  (error "Unimplemented"))
+  (error "Unimplemented message-box"))
 
 (defun message-or-box ()
-  (error "Unimplemented"))
+  (error "Unimplemented message-or-box"))
 
 (defun current-message ()
-  (error "Unimplemented"))
+  "Return the string currently displayed in the echo area, or nil if none."
+  (let ((buf (frame-echo-area-current (selected-frame))))
+    (when buf
+      (make-buffer-string (begv buf) (zv buf) t buf))))
 
 (defun compare-buffer-substrings ()
-  (error "Unimplemented"))
+  (error "Unimplemented compare-buffer-substrings"))
 
 (defun subst-char-in-region (start end fromchar tochar &optional noundo)
   "From START to END, replace FROMCHAR with TOCHAR each time it occurs.
@@ -628,16 +657,16 @@ Both characters must have the same length of multi-byte form."
     nil))
 
 (defun translate-region-internal ()
-  (error "Unimplemented"))
+  (error "Unimplemented translate-region-internal"))
 
 (defun widen ()
-  (error "Unimplemented"))
+  (error "Unimplemented widen"))
 
 (defun narrow-to-region ()
-  (error "Unimplemented"))
+  (error "Unimplemented narrow-to-region"))
 
 (defun save-restriction ()
-  (error "Unimplemented"))
+  (error "Unimplemented save-restriction"))
 
 (defun transpose-regions (startr1 endr1 startr2 endr2 &optional leave_markers)
   "Transpose region STARTR1 to ENDR1 with STARTR2 to ENDR2.

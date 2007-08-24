@@ -13,10 +13,8 @@
          ;; restore the last command
          (*last-command* *last-command*)
 	 (ret (catch 'exit
-		;;(with-lice-debugger
-		    (loop 
-		       (frame-render (selected-frame))
-		       (top-level-next-event)))))
+		(with-lice-debugger
+                    (command-loop)))))
     ;; return the ret val.
     (dformat +debug-v+ "ret ~a~%" ret)
     (when ret
