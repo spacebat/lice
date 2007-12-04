@@ -8,7 +8,7 @@ LISP_OPTS= $(@LISP@_OPTS)
 
 # This is copied from the .asd file. It'd be nice to have the list in
 # one place, but oh well.
-FILES=package.lisp wrappers.lisp global.lisp custom.lisp commands.lisp data-types.lisp keymap.lisp casefiddle.lisp subprocesses.lisp buffer-local.lisp buffer.lisp intervals.lisp textprop.lisp search.lisp frame.lisp window.lisp render.lisp wm.lisp insdel.lisp cmds.lisp editfns.lisp undo.lisp syntax.lisp major-mode.lisp keyboard.lisp debugger.lisp recursive-edit.lisp minibuffer.lisp files.lisp help.lisp debug.lisp tty-render.lisp clisp-render.lisp main.lisp lisp/subr.lisp lisp/simple.lisp indent.lisp lisp/lisp-mode.lisp lisp/lisp-indent.lisp lisp/paragraphs.lisp textmodes/text-mode.lisp play/doctor.lisp play/hanoi.lisp
+FILES=package.lisp wrappers.lisp global.lisp custom.lisp commands.lisp data-types.lisp keymap.lisp casefiddle.lisp subprocesses.lisp buffer-local.lisp buffer.lisp intervals.lisp textprop.lisp search.lisp frame.lisp window.lisp render.lisp wm.lisp insdel.lisp cmds.lisp editfns.lisp undo.lisp syntax.lisp major-mode.lisp keyboard.lisp debugger.lisp recursive-edit.lisp minibuffer.lisp files.lisp help.lisp debug.lisp tty-render.lisp clisp-render.lisp main.lisp lisp/subr.lisp lisp/simple.lisp indent.lisp emacs-lisp/lisp-mode.lisp lisp/lisp-indent.lisp lisp/paragraphs.lisp textmodes/text-mode.lisp play/doctor.lisp play/hanoi.lisp
 
 all: lice
 

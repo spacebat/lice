@@ -63,7 +63,8 @@
                                        (:file "lisp-indent")
                                        (:file "paragraphs")
                                        (:file "bindings")
-                                       (:file "paren")))
+                                       ;; (:file "paren")
+				       ))
 
                  (:module textmodes
                           :serial t

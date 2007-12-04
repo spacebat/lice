@@ -181,21 +181,21 @@ events that invoked the current command."
              ;; Make sure the current window's buffer is selected.
              (unless (eq *current-buffer* (window-buffer (selected-window)))
                (setf *current-buffer* (window-buffer (selected-window))))))
-  (setf *prefix-arg* nil
-        *last-prefix-arg* nil)
-  (loop 
-     (ensure-current-buffer)
-     (setf deactivate-mark nil)
+    (setf *prefix-arg* nil
+	  *last-prefix-arg* nil)
+    (loop 
+       (ensure-current-buffer)
+       (setf deactivate-mark nil)
 
-     (frame-render (selected-frame))
+       (frame-render (selected-frame))
 
-     ;; execute command
-     (catch :unbound-key
-       (next-event))
-     ;; A filter may have run while we were reading the input.
-     (ensure-current-buffer)
+       ;; execute command
+       (catch :unbound-key
+	 (next-event))
+       ;; A filter may have run while we were reading the input.
+       (ensure-current-buffer)
 
-))
+       )))
 
 ;;; Key bindings
 

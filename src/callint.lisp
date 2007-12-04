@@ -1,5 +1,7 @@
 ;;; Call a Lisp function interactively.
 
+(in-package #:lice)
+
 (defvar *prefix-arg* nil
   "The value of the prefix argument for the next editing command.
 It may be a number, or the symbol `-' for just a minus sign as arg,
@@ -42,7 +44,7 @@ Optional third arg KEYS, if given, specifies the sequence of events to
 supply, as a vector, if the command inquires which events were used to
 invoke it.  If KEYS is omitted or nil, the return value of
 `*this-command-keys-vector*' is used."
-  (setf function (lookup-command function))
+  ;;(setf function (lookup-command function))
   (check-type function command)
 
   (let ((args (mapcar (lambda (a)
