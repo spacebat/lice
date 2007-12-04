@@ -443,7 +443,6 @@ To ignore intangibility, bind `inhibit-point-motion-hooks' to t."
                    (constrain-to-field (point) orig
                                        (/= arg 1) t nil)))))
 
-
 (defcommand end-of-line ((&optional (n 1))
                          :prefix)
 "Move point to end of current line.
@@ -478,6 +477,40 @@ to t."
           (setf n 1))
          (t (return))))
     nil))
+
+(defcommand move-end-of-line ((arg)
+			      :prefix)
+  "Move point to end of current line as displayed.
+\(If there's an image in the line, this disregards newlines
+which are part of the text that the image rests on.)
+
+With argument ARG not nil or 1, move forward ARG - 1 lines first.
+If point reaches the beginning or end of buffer, it stops there.
+To ignore intangibility, bind `inhibit-point-motion-hooks' to t."
+  (or arg (setq arg 1))
+  (let (done)
+    (while (not done)
+      (let ((newpos
+	     (save-excursion
+	       (let ((goal-column 0))
+		 (and (line-move arg t)
+		      (not (bobp))
+		      (progn
+			(while (and (not (bobp)) (line-move-invisible-p (1- (point))))
+			  (goto-char (previous-char-property-change (point))))
+			(backward-char 1)))
+		 (point)))))
+	(goto-char newpos)
+	(if (and (> (point) newpos)
+		 (eq (preceding-char) #\Newline))
+	    (backward-char 1)
+	  (if (and (> (point) newpos) (not (eobp))
+		   (not (eq (following-char) #\Newline)))
+	      ;; If we skipped something intangible
+	      ;; and now we're not really at eol,
+	      ;; keep going.
+	      (setq arg 1)
+	    (setq done t)))))))
 
 (defcommand execute-extended-command ((prefix)
 				      :raw-prefix)
