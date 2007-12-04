@@ -420,10 +420,10 @@ To ignore intangibility, bind `inhibit-point-motion-hooks' to t."
 	(line-move (1- arg) t))
 
     ;; Move to beginning-of-line, ignoring fields and invisibles.
-    (skip-chars-backward "\\n\\n") ;; FIXME: was "^\n"
+    (skip-chars-backward "^\n")
     (while (and (not (bobp)) (line-move-invisible-p (1- (point))))
       (goto-char (previous-char-property-change (point)))
-      (skip-chars-backward "\\n\\n")) ;; FIXME: was "^\n"
+      (skip-chars-backward "^\n"))
     (setq start (point))
 
     ;; Now find first visible char in the line
