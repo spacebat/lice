@@ -1,0 +1,8 @@
+autom4te.cache
+*~
+configure
+*.fasl
+Makefile
+config.log
+config.status
+lice
