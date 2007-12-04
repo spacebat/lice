@@ -657,17 +657,17 @@ of the accessible part of the buffer."
   (set-mark-command)
   (goto-char (point-min)))
 
-(defcommand split-window-vertically ()
-  (split-window (selected-window)))
+(defcommand split-window ()
+  (split-window-internal (selected-window)))
 
 (defcommand split-window-horizontally ()
-  (split-window (selected-window) nil t))
+  (split-window-internal (selected-window) nil t))
 
 (defcommand switch-to-buffer-other-window ((buffer)
 					   (:buffer "Switch to buffer in other window: " (buffer-name (other-buffer (current-buffer)))))
   (let* ((cw (selected-window))
 	 (w (or (next-window cw)
-		(split-window cw))))
+		(split-window-internal cw))))
     (select-window w)
     (switch-to-buffer buffer)))
 

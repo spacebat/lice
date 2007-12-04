@@ -750,7 +750,7 @@ do not put this buffer at the front of the list of recently selected ones.
 	  window
 	  new)))
 
-(defun split-window (&optional (window (selected-window)) size horflag)
+(defun split-window-internal (&optional (window (selected-window)) size horflag)
   (when (typep window 'minibuffer-window)
     (error "Attempt to split minibuffer window"))
   (when (null size)
@@ -890,7 +890,7 @@ argument NOT-THIS-WINDOW is non-nil (interactively, with prefix arg).
 					    (eq (window-buffer w) buffer)))
 				     (frame-window-tree (selected-frame)))
 		(next-window cw)
-		(split-window cw))))
+		(split-window-internal cw))))
     (set-window-buffer w buffer)
     (window-restore-point w)
     w))
